@@ -1,0 +1,59 @@
+================================================================================
+PHOTO TAGGER — VERSION CHANGELOG
+================================================================================
+
+v1.1.0 (2026-10-02)
+--------------------------------------------------------------------------------
+MAJOR FEATURES:
+• Standalone Dual-Pane Comparison Workspace (compare.html & compare.js):
+  - Air-gapped side-by-side inspection running in its own isolated browser tab.
+  - Synchronized zoom and drag-pan mirroring across both panes.
+  - Instant pane flipping (Swap Sides / "S" key) preserving transform states.
+  - Dedicated tagging targeting (Pane A, Pane B, or Both).
+  - Independent split-directory subfolder traversal.
+
+• Persistent Multi-Folder Sequence Deck (deck.js):
+  - Staging drawer decoupled from grid selection, stored persistently in localStorage.
+  - Cross-directory sequencing: queue photos across separate directories and drives.
+  - Permissive queuing: allows duplicate entries for custom pacing loops.
+  - Deck Inspection Tray (Deck: X button) with thumbnail strips and single-click eviction.
+
+• Advanced Slideshow Engine (viewer.js):
+  - Variable speed selector directly in viewer header (1s, 3s, 5s, 15s, 30s).
+  - True Fisher-Yates random shuffle toggle (🔀).
+  - In-flight pruning: press Delete / Backspace or click Evict during playback to 
+    drop the current photo from the Deck sequence on the fly without halting loop.
+
+• Focal-Point Inspection Zoom (panzoom.js):
+  - Standalone, reusable PanZoom factory decoupled from DOM containers.
+  - Wheel zoom recalculates mouse offsets to zoom into the exact pixel under the cursor.
+
+ARCHITECTURAL & MEMORY OPTIMIZATIONS:
+• Full Modular Decoupling:
+  - Extracted monolithic scripts into discrete modules (panzoom.js, state.js, deck.js, 
+    api.js, grid.js, presets.js, viewer.js, compare.js, app.js).
+• GPU & RAM Containment:
+  - Background grid occlusion (display: none) while fullscreen viewer is active to drop 
+    off-screen thumbnails from the compositor cache.
+  - Immediate texture purging (img.src = "") on slide transition and viewer close.
+  - View-frustum DOM containment (content-visibility: auto) for large catalog scrolling.
+  - On-the-fly 800px thumbnail generation cached in .cache/thumbnails.
+
+BUG FIXES & STABILITY:
+• Replaced PowerShell Form picker with native Windows Shell.Application COM object to 
+  guarantee folder dialogs mount directly to the foreground.
+• Eliminated duplicate variable declarations across modules that prevented viewer initialization.
+• Universal path canonicalization across Windows drive letters and slash formats.
+• Added dedicated one-click clear button (✕) to the search filter bar.
+
+--------------------------------------------------------------------------------
+v1.0.0
+--------------------------------------------------------------------------------
+• Initial release:
+  - Single-binary Go daemon with embedded web assets (embed.FS).
+  - Flat and recursive folder scanning.
+  - In-place, non-destructive catalog.json sidecar persistence.
+  - Boolean AND/NOT search filtering and untagged isolation.
+  - Preset tag palettes with 1-9 quick-stamp hotkeys.
+  - Inspect and Select interaction modes with S/M/L density switching.
+================================================================================

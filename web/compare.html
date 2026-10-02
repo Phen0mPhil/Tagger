@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Photo Tagger — Dual Compare</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css">
+  <style>
+    body { background-color: #000000; color: #e2e8f0; overflow: hidden; }
+    .viewport-img { max-height: calc(100vh - 210px); max-width: 100%; object-fit: contain; }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col font-sans select-none bg-black text-slate-100">
+
+  <!-- TOP BAR -->
+  <header class="h-10 bg-black/95 border-b border-zinc-800 px-4 flex items-center justify-between z-40">
+    <div class="flex items-center gap-3">
+      <span class="text-xs font-black tracking-widest text-sky-400 uppercase">Dual Sandbox</span>
+      <span class="text-zinc-600 text-xs">|</span>
+      <button onclick="swapPanes()" class="px-2.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-300 font-semibold transition">
+        ⇄ Swap Sides
+      </button>
+      <label class="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer">
+        <input id="syncZoomCheck" type="checkbox" class="accent-sky-500 rounded">
+        <span>Sync Zoom & Pan</span>
+      </label>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="window.close()" class="px-2.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-300 transition">
+        Close Tab
+      </button>
+    </div>
+  </header>
+
+  <!-- SPLIT WORKSPACE -->
+  <main class="flex-grow grid grid-cols-2 divide-x divide-zinc-800 overflow-hidden relative">
+
+    <!-- PANE A -->
+    <section id="paneA" class="flex flex-col h-full bg-black relative overflow-hidden">
+      <div class="bg-zinc-950/90 border-b border-zinc-800 px-3 py-1.5 flex flex-col gap-1 z-20">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 flex-grow truncate">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-sky-400 bg-sky-950/60 border border-sky-800/80 px-1.5 py-0.2 rounded">Left</span>
+            <button onclick="pickDirectoryForPane('A')" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200">📁 Change</button>
+            <span id="pathLabelA" class="font-mono text-[11px] text-zinc-400 truncate">No folder</span>
+          </div>
+          <span id="counterA" class="text-xs font-mono text-zinc-400 shrink-0">0 / 0</span>
+        </div>
+        <div id="subfolderBarA" class="flex items-center gap-1 overflow-x-auto text-[11px] py-0.5"></div>
+      </div>
+
+      <div id="containerA" class="flex-grow flex items-center justify-center relative p-2 overflow-hidden bg-black">
+        <img id="imgA" class="viewport-img transition-transform duration-75 select-none" src="" alt="Left view" />
+        <button onclick="navPane('A', -1)" class="absolute left-2 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white px-2.5 py-4 rounded text-lg border border-zinc-800 z-10">‹</button>
+        <button onclick="navPane('A', 1)" class="absolute right-2 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white px-2.5 py-4 rounded text-lg border border-zinc-800 z-10">›</button>
+      </div>
+
+      <div class="bg-zinc-950/90 border-t border-zinc-800 px-3 py-1 flex items-center justify-between text-xs">
+        <span id="fileNameA" class="font-mono text-zinc-300 truncate max-w-xs text-[11px]"></span>
+        <div id="tagsListA" class="flex flex-wrap gap-1 overflow-x-auto max-w-sm"></div>
+      </div>
+    </section>
+
+    <!-- PANE B -->
+    <section id="paneB" class="flex flex-col h-full bg-black relative overflow-hidden">
+      <div class="bg-zinc-950/90 border-b border-zinc-800 px-3 py-1.5 flex flex-col gap-1 z-20">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 flex-grow truncate">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.2 rounded">Right</span>
+            <button onclick="pickDirectoryForPane('B')" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200">📁 Change</button>
+            <span id="pathLabelB" class="font-mono text-[11px] text-zinc-400 truncate">No folder</span>
+          </div>
+          <span id="counterB" class="text-xs font-mono text-zinc-400 shrink-0">0 / 0</span>
+        </div>
+        <div id="subfolderBarB" class="flex items-center gap-1 overflow-x-auto text-[11px] py-0.5"></div>
+      </div>
+
+      <div id="containerB" class="flex-grow flex items-center justify-center relative p-2 overflow-hidden bg-black">
+        <img id="imgB" class="viewport-img transition-transform duration-75 select-none" src="" alt="Right view" />
+        <button onclick="navPane('B', -1)" class="absolute left-2 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white px-2.5 py-4 rounded text-lg border border-zinc-800 z-10">‹</button>
+        <button onclick="navPane('B', 1)" class="absolute right-2 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white px-2.5 py-4 rounded text-lg border border-zinc-800 z-10">›</button>
+      </div>
+
+      <div class="bg-zinc-950/90 border-t border-zinc-800 px-3 py-1 flex items-center justify-between text-xs">
+        <span id="fileNameB" class="font-mono text-zinc-300 truncate max-w-xs text-[11px]"></span>
+        <div id="tagsListB" class="flex flex-wrap gap-1 overflow-x-auto max-w-sm"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- DOCKED TAGGING STATION -->
+  <footer class="bg-zinc-950 border-t border-zinc-800 px-4 py-2 flex flex-wrap items-center justify-between gap-3 z-40">
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-bold text-zinc-400 uppercase tracking-wider text-[11px]">Apply Tags To:</span>
+      <div class="flex items-center bg-zinc-900 border border-zinc-800 rounded p-0.5">
+        <button id="targetBtnA" onclick="setTagTarget('A')" class="px-2.5 py-0.5 rounded text-xs font-semibold text-zinc-400 hover:text-white transition">Pane A</button>
+        <button id="targetBtnB" onclick="setTagTarget('B')" class="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-600 text-white shadow transition">Pane B</button>
+        <button id="targetBtnBoth" onclick="setTagTarget('BOTH')" class="px-2.5 py-0.5 rounded text-xs font-semibold text-zinc-400 hover:text-white transition">Both A & B</button>
+      </div>
+    </div>
+
+    <div id="comparePaletteContainer" class="flex items-center gap-1.5 overflow-x-auto max-w-2xl py-0.5"></div>
+
+    <div class="flex items-center gap-1.5">
+      <input id="compareCustomTagInput" type="text" placeholder="Custom tags (comma separated)..." class="bg-black border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 w-48 focus:w-60 transition-all focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') applyCustomCompareTag()" />
+      <button onclick="applyCustomCompareTag()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition">Apply</button>
+    </div>
+  </footer>
+
+  <script src="/js/panzoom.js"></script>
+  <script src="/js/compare.js"></script>
+</body>
+</html>

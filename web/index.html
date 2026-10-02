@@ -1,57 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Photo Tagger</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="min-h-screen flex flex-col font-sans select-none bg-black text-slate-100">
 
-<div class="flex items-center gap-2 flex-grow justify-end max-w-xl">
-  <input id="searchInput" type="text" placeholder="Search tags or file names (-negative, +untagged)..." class="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 flex-grow focus:border-sky-500 focus:outline-none" oninput="applyFilters()" />
-  <button id="untaggedToggleBtn" onclick="toggleUntaggedOnly()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded text-xs font-semibold transition">
-    ★ Untagged
-  </button>
-  <button onclick="exitApp()" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-xs font-bold transition" title="Quit Server">
-    ✕
-  </button>
-</div>
+  <!-- ROW 1: Folder Navigation & Search -->
+  <header class="sticky top-0 z-40 bg-black/95 border-b border-zinc-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-lg backdrop-blur">
+    <div class="flex items-center gap-2 flex-grow max-w-xl">
+      <button onclick="pickFolder()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-100 rounded text-xs font-semibold flex items-center gap-1 border border-zinc-700 transition shrink-0">
+        📁 Choose
+      </button>
+      
+      <input id="dirInput" type="text" placeholder="Paste or type Windows path (e.g. D:\Weddings)..." class="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 font-mono flex-grow focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') triggerScan()" />
 
+      <label class="flex items-center gap-1 text-[11px] text-zinc-400 cursor-pointer shrink-0">
+        <input id="recursiveCheck" type="checkbox" class="accent-sky-500 rounded">
+        <span>Subfolders</span>
+      </label>
+      
+      <button onclick="triggerScan()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition shrink-0">
+        Scan
+      </button>
+      
+      <button onclick="openCompareTab()" class="px-3 py-1 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 rounded text-xs font-bold transition flex items-center gap-1 shrink-0" title="Open Dual Compare in a new tab">
+        ⚖ Compare
+      </button>
+    </div>
 
-  <span id="selectionCount" class="text-xs font-mono text-zinc-400">0 selected</span>
-  <button onclick="selectVisible()" class="text-xs text-sky-400 hover:text-sky-300 underline font-medium">All Visible</button>
-  <button onclick="clearSelection()" class="text-xs text-zinc-400 hover:text-zinc-200 underline">Clear</button>
+    <!-- Search Cluster -->
+    <div class="flex items-center gap-1.5 flex-grow justify-end max-w-xl">
+      <div class="relative flex-grow flex items-center">
+        <input id="searchInput" type="text" placeholder="Search tags or file names (-negative, +untagged)..." class="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 pr-6 text-xs text-zinc-100 w-full focus:border-sky-500 focus:outline-none" oninput="applyFilters()" />
+        <button onclick="clearSearch()" class="absolute right-1.5 text-zinc-500 hover:text-zinc-200 text-xs font-bold p-0.5" title="Clear search">✕</button>
+      </div>
+      <button id="untaggedToggleBtn" onclick="toggleUntaggedOnly()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded text-xs font-semibold transition shrink-0">
+        ★ Untagged
+      </button>
+      <button onclick="exitApp()" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-xs font-bold transition shrink-0" title="Quit Server">
+        ✕
+      </button>
+    </div>
+  </header>
 
-  <div class="h-3 w-px bg-zinc-800 mx-1"></div>
+  <!-- ROW 2: Breadcrumbs & Quick Hops -->
+  <section class="bg-zinc-950 border-b border-zinc-900 px-3 py-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+    <div id="breadcrumbBar" class="flex items-center gap-1 font-mono text-zinc-400 overflow-x-auto text-[11px]">
+      <span class="text-zinc-600">Path:</span>
+      <span class="text-zinc-500 italic">No folder loaded</span>
+    </div>
+    <div class="h-3 w-px bg-zinc-800 mx-1"></div>
+    <div id="subfolderBar" class="flex items-center gap-1.5 overflow-x-auto"></div>
+  </section>
 
-  <!-- Density & Page Size Controls -->
-  <div class="flex items-center border border-zinc-800 rounded overflow-hidden">
-    <button onclick="setDensity('dense')" id="denseBtn" class="px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-r border-zinc-800">S</button>
-    <button onclick="setDensity('standard')" id="stdBtn" class="px-2 py-0.5 text-[11px] bg-sky-700 text-white border-r border-zinc-800">M</button>
-    <button onclick="setDensity('large')" id="largeBtn" class="px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300">L</button>
+  <!-- ROW 3: Controls -> The Deck -> Presets -->
+  <section class="sticky top-[45px] z-30 bg-black/90 border-b border-zinc-800 px-3 py-1.5 flex flex-wrap items-center justify-between gap-3 backdrop-blur">
+    
+    <!-- Left Cluster: Select & Staging Station -->
+    <div class="flex items-center gap-2 shrink-0">
+      <button id="modeToggleBtn" onclick="toggleInteractionMode()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded text-xs font-bold border border-zinc-700 flex items-center gap-1 transition">
+        <span id="modeIcon">🔍</span> <span id="modeLabel">Inspect</span>
+      </button>
+
+      <span id="selectionCount" class="text-xs font-mono text-zinc-400">0 sel</span>
+      <button onclick="selectVisible()" class="text-xs text-sky-400 hover:text-sky-300 underline font-medium">All</button>
+      <button onclick="clearSelection()" class="text-xs text-zinc-400 hover:text-zinc-200 underline">Clr</button>
+
+      <!-- The Deck Staging Station -->
+      <div class="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5">
+        <button onclick="addToDeckFromSelection()" class="px-2 py-0.5 bg-sky-900/80 hover:bg-sky-800 border border-sky-700 text-sky-200 rounded text-[11px] font-bold transition flex items-center gap-1" title="Append selection to persistent Deck">
+          + Deck
+        </button>
+        <button onclick="openDeckModal()" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 rounded text-[11px] font-mono transition flex items-center gap-1" title="Inspect / Manage Deck Sequence">
+          Deck: <span id="deckCountBadge" class="font-bold text-sky-400">0</span>
+        </button>
+        <button onclick="startDeckSlideshow()" class="px-2.5 py-0.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded text-[11px] font-bold transition flex items-center gap-1">
+          ▶ Play
+        </button>
+      </div>
+
+      <div class="h-3 w-px bg-zinc-800 mx-0.5"></div>
+
+      <!-- Density & Pagination -->
+      <div class="flex items-center border border-zinc-800 rounded overflow-hidden">
+        <button onclick="setDensity('dense')" id="denseBtn" class="px-1.5 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-r border-zinc-800">S</button>
+        <button onclick="setDensity('standard')" id="stdBtn" class="px-1.5 py-0.5 text-[11px] bg-sky-700 text-white border-r border-zinc-800">M</button>
+        <button onclick="setDensity('large')" id="largeBtn" class="px-1.5 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300">L</button>
+      </div>
+
+      <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="bg-zinc-900 border border-zinc-800 rounded text-[11px] px-1 py-0.5 text-zinc-300 focus:outline-none">
+        <option value="30">30</option>
+        <option value="60">60</option>
+        <option value="100" selected>100</option>
+        <option value="99999">All</option>
+      </select>
+
+      <div class="flex items-center gap-1">
+        <button onclick="changePage(-1)" class="topPrevBtn px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-[11px] text-zinc-300 disabled:opacity-30">‹</button>
+        <span class="topPageIndicator font-mono text-[11px] text-zinc-400">1/1</span>
+        <button onclick="changePage(1)" class="topNextBtn px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-[11px] text-zinc-300 disabled:opacity-30">›</button>
+      </div>
+
+      <!-- Palettes -->
+      <div class="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5">
+        <select id="presetSelect" onchange="handlePresetChange(this.value)" class="bg-transparent text-xs text-zinc-200 font-semibold focus:outline-none cursor-pointer"></select>
+        <button onclick="openPresetModal()" class="text-zinc-400 hover:text-zinc-200 text-xs px-1" title="Edit palettes">⚙</button>
+      </div>
+    </div>
+
+    <!-- Right Cluster: Tag Pills -->
+    <div class="flex items-center gap-2 flex-grow justify-end min-w-0">
+      <div id="palettePills" class="flex items-center gap-1.5 overflow-x-auto flex-grow justify-start py-0.5"></div>
+      <div class="flex items-center gap-1 shrink-0">
+        <input id="customTagInput" type="text" placeholder="+ Custom tag..." class="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 w-28 focus:w-36 transition-all focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') applyCustomTagInput()" />
+        <button onclick="applyCustomTagInput()" class="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition">Add</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN PHOTO GRID AREA -->
+  <main id="mainGridArea" class="flex-grow p-3 bg-black">
+    <div id="imageGrid" class="grid grid-standard gap-2.5"></div>
+    <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 text-zinc-600">
+      <div class="text-4xl mb-2">📁</div>
+      <p class="text-sm">No images match your active view.</p>
+    </div>
+  </main>
+
+  <!-- FOOTER PAGINATION -->
+  <footer class="sticky bottom-0 z-30 bg-black/95 border-t border-zinc-900 px-4 py-2 flex items-center justify-between text-xs text-zinc-400 backdrop-blur">
+    <div id="statusBar">Loaded 0 items</div>
+    <div class="flex items-center gap-2">
+      <button onclick="changePage(-1)" id="prevPageBtn" class="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-xs disabled:opacity-30">Prev</button>
+      <span id="pageIndicator" class="font-mono text-zinc-300">Page 1 / 1</span>
+      <button onclick="changePage(1)" id="nextPageBtn" class="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-xs disabled:opacity-30">Next</button>
+    </div>
+  </footer>
+
+  <!-- FULLSCREEN LIGHTBOX & DECK SLIDESHOW VIEWER -->
+  <div id="lightbox" class="fixed inset-0 z-50 bg-black hidden flex flex-col">
+    <div class="flex items-center justify-between px-4 py-2.5 bg-zinc-950 border-b border-zinc-800">
+      <div class="flex items-center gap-3">
+        <span id="lbCounter" class="text-xs font-mono text-zinc-400">1 / 1</span>
+        <span id="lbFilename" class="text-xs font-mono text-zinc-200 font-bold truncate max-w-sm"></span>
+        
+        <!-- Deck Controls & Speed Stepper -->
+        <div id="deckSlideshowControls" class="flex items-center gap-2 ml-2 pl-2 border-l border-zinc-800">
+          <button id="lbSlideshowToggle" onclick="toggleSlideshowPlayback()" class="px-2.5 py-0.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-xs rounded font-bold">⏸ Pause</button>
+          
+          <!-- Speed Stepper Pills -->
+          <div class="flex items-center border border-zinc-800 rounded overflow-hidden text-[11px] font-mono">
+            <button onclick="setSlideshowSpeed(1000)" data-speed="1000" class="speedBtn px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-r border-zinc-800">1s</button>
+            <button onclick="setSlideshowSpeed(3500)" data-speed="3500" class="speedBtn px-1.5 py-0.5 bg-sky-600 text-white font-bold border-r border-zinc-800">3s</button>
+            <button onclick="setSlideshowSpeed(5000)" data-speed="5000" class="speedBtn px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-r border-zinc-800">5s</button>
+            <button onclick="setSlideshowSpeed(15000)" data-speed="15000" class="speedBtn px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-r border-zinc-800">15s</button>
+            <button onclick="setSlideshowSpeed(30000)" data-speed="30000" class="speedBtn px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400">30s</button>
+          </div>
+
+          <!-- Shuffle Toggle -->
+          <button id="shuffleToggleBtn" onclick="toggleShuffle()" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 rounded text-xs font-semibold" title="Toggle Random Shuffle">
+            🔀 Shuffle
+          </button>
+
+          <!-- Prune Slide Action -->
+          <button onclick="evictCurrentSlideFromDeck()" class="px-2 py-0.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-xs" title="Evict this slide from the current Deck (Del)">
+            🗑 Evict
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <label class="flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
+          <input type="checkbox" id="lbSelectCheckbox" class="accent-sky-500 rounded" onchange="toggleSelectFromLightbox()">
+          <span>Selected</span>
+        </label>
+        
+        <button onclick="closeLightbox()" class="px-3.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-sm font-black transition flex items-center gap-1 shadow-lg border border-rose-400/30" title="Close Lightbox (Esc)">
+          ✕ Close
+        </button>
+      </div>
+    </div>
+    
+    <!-- Viewport Container with Boundary Frame -->
+    <div id="lbImageContainer" class="flex-grow flex items-center justify-center relative p-3 overflow-hidden bg-black" onclick="handleLightboxClick(event)">
+      <div class="relative max-h-full max-w-full flex items-center justify-center rounded border border-zinc-800 bg-black/60 shadow-2xl overflow-hidden pointer-events-none">
+        <img id="lbImage" class="max-h-[82vh] max-w-[92vw] object-contain transition-transform duration-75 select-none pointer-events-auto" src="" />
+      </div>
+      
+      <button onclick="navigateLightbox(-1)" class="absolute left-4 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-zinc-900 text-white px-3.5 py-6 rounded-lg text-2xl border border-zinc-800 z-10 transition">‹</button>
+      <button onclick="navigateLightbox(1)" class="absolute right-4 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-zinc-900 text-white px-3.5 py-6 rounded-lg text-2xl border border-zinc-800 z-10 transition">›</button>
+    </div>
+
+    <div class="p-3 bg-zinc-950/95 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+      <div id="lbTags" class="flex flex-wrap gap-1.5"></div>
+      <div class="flex items-center gap-1">
+        <input id="lbAddTagInput" type="text" placeholder="+ Tag..." class="bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs text-zinc-100 focus:outline-none" onkeydown="if(event.key==='Enter') addLightboxTag()" />
+        <button onclick="addLightboxTag()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold">Add</button>
+      </div>
+    </div>
   </div>
 
-  <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="bg-zinc-900 border border-zinc-800 rounded text-[11px] px-1.5 py-0.5 text-zinc-300 focus:outline-none">
-    <option value="30">30 / page</option>
-    <option value="60">60 / page</option>
-    <option value="100" selected>100 / page</option>
-  </select>
-
-  <button id="slideshowTriggerBtn" onclick="startSlideshow()" class="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded text-xs font-semibold flex items-center gap-1 transition">
-    ▶ Slideshow
-  </button>
-</div>
-
-<!-- Active Palettes & Tag Input -->
-<div class="flex items-center gap-2 flex-grow justify-end max-w-xl">
-  <select id="presetSelect" onchange="handlePresetChange(this.value)" class="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-semibold focus:outline-none">
-  </select>
-  <button onclick="openPresetModal()" class="text-zinc-400 hover:text-zinc-200 text-xs px-1" title="Edit presets">⚙</button>
-  
-  <div id="palettePills" class="flex items-center gap-1 overflow-x-auto max-w-xs">
-    <!-- Hotkey pill tags render here -->
+  <!-- THE DECK MANAGER MODAL (Staging Drawer) -->
+  <div id="deckModal" class="fixed inset-0 z-50 bg-black/85 hidden flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-lg max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950">
+        <div class="flex items-center gap-3">
+          <h3 class="font-bold text-sm text-zinc-100 uppercase tracking-wider">Sequence Deck</h3>
+          <span id="deckModalCount" class="text-xs font-mono text-zinc-400">0 items</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="playDeckFromModal()" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition flex items-center gap-1">
+            ▶ Play Deck
+          </button>
+          <button onclick="clearDeck(); renderDeckGrid();" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-rose-300 rounded text-xs transition">
+            Clear Deck
+          </button>
+          <button onclick="closeDeckModal()" class="text-zinc-400 hover:text-white px-2 text-base">✕</button>
+        </div>
+      </div>
+      <div id="deckGridContainer" class="flex-grow p-4 overflow-y-auto grid grid-cols-4 sm:grid-cols-6 gap-2.5 bg-black"></div>
+    </div>
   </div>
 
-  <div class="flex items-center gap-1">
-    <input id="customTagInput" type="text" placeholder="Add custom tags..." class="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 w-32 focus:w-44 transition-all focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') applyCustomTagInput()" />
-    <button onclick="applyCustomTagInput()" class="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition">Apply</button>
+  <!-- PRESET MANAGER MODAL -->
+  <div id="presetModal" class="fixed inset-0 z-50 bg-black/80 hidden flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-lg max-w-md w-full p-4 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-2">
+        <h3 class="font-bold text-sm text-zinc-100">Manage Tag Palettes</h3>
+        <button onclick="closePresetModal()" class="text-zinc-400 hover:text-white">✕</button>
+      </div>
+      <div>
+        <label class="text-xs text-zinc-400">Current Palette</label>
+        <select id="modalPresetSelect" onchange="renderPresetModalTags()" class="w-full bg-zinc-950 border border-zinc-800 rounded p-1.5 text-xs text-zinc-200 mt-1"></select>
+      </div>
+      <div>
+        <label class="text-xs text-zinc-400">Tags in this Palette</label>
+        <div id="modalTagList" class="flex flex-wrap gap-1.5 p-2 bg-zinc-950 border border-zinc-800 rounded min-h-[60px] mt-1"></div>
+      </div>
+      <div class="flex gap-2">
+        <input id="modalNewTagInput" type="text" placeholder="Add tag to palette..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 focus:outline-none" onkeydown="if(event.key==='Enter') addTagToCurrentPreset()" />
+        <button onclick="addTagToCurrentPreset()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 rounded text-xs font-bold text-white">Add</button>
+      </div>
+      <div class="border-t border-zinc-800 pt-3 flex justify-between">
+        <button onclick="createNewPresetPrompt()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-xs text-zinc-300">+ New Palette</button>
+        <button onclick="deleteCurrentPreset()" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-800 rounded text-xs text-rose-300">Delete Palette</button>
+      </div>
+    </div>
   </div>
-</div>
 
+  <div id="toast" class="fixed bottom-12 right-4 z-50 bg-zinc-900 border border-zinc-700 text-zinc-200 px-3 py-2 rounded text-xs shadow-xl hidden"></div>
 
-<div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 text-zinc-600">
-  <div class="text-4xl mb-2">📁</div>
-  <p class="text-sm">No images match your active view.</p>
-</div>
+  <!-- LOAD ORDER -->
+  <script src="/js/panzoom.js"></script>
+  <script src="/js/state.js"></script>
+  <script src="/js/deck.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/grid.js"></script>
+  <script src="/js/presets.js"></script>
+  <script src="/js/viewer.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -34,6 +34,7 @@ func main() {
 	mux.HandleFunc("/api/tags/add", handleAddTags)
 	mux.HandleFunc("/api/tags/remove", handleRemoveTag)
 	mux.HandleFunc("/api/image", handleServeImage)
+	mux.HandleFunc("/api/thumbnail", handleServeThumbnail)
 	mux.HandleFunc("/api/shutdown", handleShutdown)
 
 	port := 8080

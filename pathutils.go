@@ -1,80 +1,53 @@
 package main
 
 import (
-	"bytes"
-	"os"
-	"os/exec"
-	"runtime"
-	"strings"
-	"syscall"
+"bytes"
+"os/exec"
+"path/filepath"
+"strings"
+"syscall"
 )
 
 func cleanPathString(p string) string {
-	p = strings.TrimPrefix(p, "\xef\xbb\xbf")
-	p = strings.TrimPrefix(p, "\ufeff")
-	return strings.TrimSpace(p)
+p = strings.TrimPrefix(p, "\xef\xbb\xbf")
+p = strings.TrimPrefix(p, "\ufeff")
+return strings.TrimSpace(p)
 }
 
-func resolveUniversalPath(input string) string {
-	clean := cleanPathString(input)
-	if clean == "" {
-		return ""
-	}
+func canonicalizePath(input string) string {
+clean := cleanPathString(input)
+if clean == "" {
+return ""
+}
 
-	clean = strings.ReplaceAll(clean, "\\", "/")
+clean = filepath.ToSlash(filepath.Clean(clean))
 
-	if runtime.GOOS == "windows" {
-		return clean
-	}
+if len(clean) >= 2 && clean[1] == ':' {
+clean = strings.ToLower(string(clean[0])) + clean[1:]
+}
 
-	// WSL translations
-	if len(clean) >= 2 && clean[1] == ':' {
-		letter := strings.ToLower(string(clean[0]))
-		rest := strings.TrimPrefix(clean[2:], "/")
-		return "/mnt/" + letter + "/" + rest
-	}
-
-	return clean
+return strings.TrimRight(clean, "/")
 }
 
 func pickFolderGUI() (string, error) {
-	if runtime.GOOS != "windows" && os.Getenv("WSL_DISTRO_NAME") == "" {
-		return "", nil
-	}
-
-	psScript := `
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName Microsoft.VisualBasic
-$f = New-Object System.Windows.Forms.FolderBrowserDialog
-$f.Description = "Select Image Directory"
-$f.ShowNewFolderButton = $true
-
-$form = New-Object System.Windows.Forms.Form
-$form.TopMost = $true
-$form.StartPosition = "CenterScreen"
-$form.WindowState = "Minimized"
-$form.Show()
-$form.Activate()
-$form.BringToFront()
-
-$result = $f.ShowDialog($form)
-$form.Dispose()
-
-if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-    Write-Output $f.SelectedPath
+psScript := `
+$app = New-Object -ComObject Shell.Application
+$folder = $app.BrowseForFolder(0, "Select Photo Directory", 0x0011, 0)
+if ($folder) {
+    [Console]::Write($folder.Self.Path)
 }
 `
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", psScript)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
-	}
+cmd := exec.Command("powershell", "-NoProfile", "-Sta", "-NonInteractive", "-Command", psScript)
+cmd.SysProcAttr = &syscall.SysProcAttr{
+CreationFlags: 0x08000000,
+}
 
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	err := cmd.Run()
-	if err != nil {
-		return "", nil
-	}
+var out bytes.Buffer
+cmd.Stdout = &out
+err := cmd.Run()
+if err != nil {
+return "", err
+}
 
-	return cleanPathString(out.String()), nil
+return cleanPathString(out.String()), nil
 }

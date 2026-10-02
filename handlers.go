@@ -1,8 +1,14 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"net/http"
 	"net/url"
 	"os"
@@ -29,7 +35,7 @@ func handleBrowseFolders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	normDir := resolveUniversalPath(rawDir)
+	normDir := canonicalizePath(rawDir)
 	info, err := os.Stat(normDir)
 	if err != nil || !info.IsDir() {
 		http.Error(w, fmt.Sprintf("invalid directory: %v", err), http.StatusBadRequest)
@@ -110,22 +116,15 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resolved := resolveUniversalPath(req.Path)
-	info, err := os.Stat(resolved)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Directory does not exist: %s (%v)", resolved, err), http.StatusBadRequest)
-		return
-	}
-	if !info.IsDir() {
-		http.Error(w, "Path is not a directory", http.StatusBadRequest)
+	canonical := canonicalizePath(req.Path)
+	info, err := os.Stat(canonical)
+	if err != nil || !info.IsDir() {
+		http.Error(w, "Path is not a valid directory", http.StatusBadRequest)
 		return
 	}
 
-	globalCatalog.mu.Lock()
-	globalCatalog.RootDir = resolved
-	globalCatalog.mu.Unlock()
-
-	discovered, scanErr := globalCatalog.Scan(req.Recursive)
+	cat := globalPool.Get(canonical)
+	discovered, scanErr := cat.Scan(req.Recursive)
 	if scanErr != nil {
 		http.Error(w, fmt.Sprintf("Scan error: %v", scanErr), http.StatusInternalServerError)
 		return
@@ -135,17 +134,24 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"status":     "ok",
 		"discovered": discovered,
-		"total":      len(globalCatalog.Entries),
-		"root_dir":   resolved,
+		"total":      len(cat.Entries),
+		"root_dir":   canonical,
 	})
 }
 
 func handleEntries(w http.ResponseWriter, r *http.Request) {
-	globalCatalog.mu.RLock()
-	defer globalCatalog.mu.RUnlock()
+	dir := canonicalizePath(r.URL.Query().Get("dir"))
+	if dir == "" {
+		http.Error(w, "dir parameter is required", http.StatusBadRequest)
+		return
+	}
 
-	list := make([]*ImageEntry, 0, len(globalCatalog.Entries))
-	for _, entry := range globalCatalog.Entries {
+	cat := globalPool.Get(dir)
+	cat.mu.RLock()
+	defer cat.mu.RUnlock()
+
+	list := make([]*ImageEntry, 0, len(cat.Entries))
+	for _, entry := range cat.Entries {
 		list = append(list, entry)
 	}
 
@@ -164,6 +170,7 @@ func handleAddTags(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		Dir           string   `json:"dir"`
 		RelativePaths []string `json:"relative_paths"`
 		Tags          []string `json:"tags"`
 	}
@@ -172,8 +179,14 @@ func handleAddTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cat := globalPool.Get(req.Dir)
+	if cat == nil {
+		http.Error(w, "Invalid dir", http.StatusBadRequest)
+		return
+	}
+
 	for _, rel := range req.RelativePaths {
-		if err := globalCatalog.AddTags(rel, req.Tags); err != nil {
+		if err := cat.AddTags(rel, req.Tags); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -190,6 +203,7 @@ func handleRemoveTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		Dir          string `json:"dir"`
 		RelativePath string `json:"relative_path"`
 		Tag          string `json:"tag"`
 	}
@@ -198,7 +212,13 @@ func handleRemoveTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := globalCatalog.RemoveTag(req.RelativePath, req.Tag); err != nil {
+	cat := globalPool.Get(req.Dir)
+	if cat == nil {
+		http.Error(w, "Invalid dir", http.StatusBadRequest)
+		return
+	}
+
+	if err := cat.RemoveTag(req.RelativePath, req.Tag); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -208,23 +228,124 @@ func handleRemoveTag(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleServeImage(w http.ResponseWriter, r *http.Request) {
+	dir := canonicalizePath(r.URL.Query().Get("dir"))
 	rawRel := r.URL.Query().Get("file")
 	rel, err := url.QueryUnescape(rawRel)
 	if err != nil {
 		rel = rawRel
 	}
 
-	globalCatalog.mu.RLock()
-	root := globalCatalog.RootDir
-	globalCatalog.mu.RUnlock()
+	cat := globalPool.Get(dir)
+	if cat == nil {
+		http.Error(w, "Directory not found", http.StatusBadRequest)
+		return
+	}
 
-	fullPath := filepath.Join(root, filepath.FromSlash(rel))
-	if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(root)) {
+	fullPath := filepath.Join(cat.RootDir, filepath.FromSlash(rel))
+	if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(cat.RootDir)) {
 		http.Error(w, "Access denied", http.StatusForbidden)
 		return
 	}
 
 	http.ServeFile(w, r, fullPath)
+}
+
+func handleServeThumbnail(w http.ResponseWriter, r *http.Request) {
+	dir := canonicalizePath(r.URL.Query().Get("dir"))
+	rawRel := r.URL.Query().Get("file")
+	rel, err := url.QueryUnescape(rawRel)
+	if err != nil {
+		rel = rawRel
+	}
+
+	cat := globalPool.Get(dir)
+	if cat == nil {
+		http.Error(w, "Directory not found", http.StatusBadRequest)
+		return
+	}
+
+	srcPath := filepath.Join(cat.RootDir, filepath.FromSlash(rel))
+	if !strings.HasPrefix(filepath.Clean(srcPath), filepath.Clean(cat.RootDir)) {
+		http.Error(w, "Access denied", http.StatusForbidden)
+		return
+	}
+
+	cacheDir := filepath.Join(cat.RootDir, ".cache", "thumbnails")
+	_ = os.MkdirAll(cacheDir, 0755)
+
+	hash := sha256.Sum256([]byte(rel))
+	thumbName := hex.EncodeToString(hash[:16]) + ".jpg"
+	cachedPath := filepath.Join(cacheDir, thumbName)
+
+	if info, err := os.Stat(cachedPath); err == nil && info.Size() > 0 {
+		http.ServeFile(w, r, cachedPath)
+		return
+	}
+
+	file, err := os.Open(srcPath)
+	if err != nil {
+		http.ServeFile(w, r, srcPath)
+		return
+	}
+	defer file.Close()
+
+	img, _, err := image.Decode(file)
+	if err != nil {
+		http.ServeFile(w, r, srcPath)
+		return
+	}
+
+	resized := downscaleImage(img, 800)
+	tmpPath := cachedPath + ".tmp"
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		http.ServeFile(w, r, srcPath)
+		return
+	}
+
+	_ = jpeg.Encode(out, resized, &jpeg.Options{Quality: 82})
+	_ = out.Close()
+	_ = os.Rename(tmpPath, cachedPath)
+
+	http.ServeFile(w, r, cachedPath)
+}
+
+func downscaleImage(src image.Image, maxEdge int) image.Image {
+	b := src.Bounds()
+	w, h := b.Dx(), b.Dy()
+
+	if w <= maxEdge && h <= maxEdge {
+		return src
+	}
+
+	var newW, newH int
+	if w > h {
+		newW = maxEdge
+		newH = (h * maxEdge) / w
+	} else {
+		newH = maxEdge
+		newW = (w * maxEdge) / h
+	}
+
+	if newW < 1 {
+		newW = 1
+	}
+	if newH < 1 {
+		newH = 1
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+	xRatio := (w << 16) / newW
+	yRatio := (h << 16) / newH
+
+	for y := 0; y < newH; y++ {
+		srcY := ((y * yRatio) >> 16) + b.Min.Y
+		for x := 0; x < newW; x++ {
+			srcX := ((x * xRatio) >> 16) + b.Min.X
+			dst.Set(x, y, src.At(srcX, srcY))
+		}
+	}
+	return dst
 }
 
 func handleShutdown(w http.ResponseWriter, r *http.Request) {

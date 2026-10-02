@@ -22,8 +22,34 @@ type Catalog struct {
 	Entries map[string]*ImageEntry `json:"entries"`
 }
 
-var globalCatalog = &Catalog{
-	Entries: make(map[string]*ImageEntry),
+type CatalogPool struct {
+	mu       sync.RWMutex
+	catalogs map[string]*Catalog
+}
+
+var globalPool = &CatalogPool{
+	catalogs: make(map[string]*Catalog),
+}
+
+func (p *CatalogPool) Get(dir string) *Catalog {
+	canonical := canonicalizePath(dir)
+	if canonical == "" {
+		return nil
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	cat, exists := p.catalogs[canonical]
+	if !exists {
+		cat = &Catalog{
+			RootDir: canonical,
+			Entries: make(map[string]*ImageEntry),
+		}
+		_ = cat.LoadFromDisk()
+		p.catalogs[canonical] = cat
+	}
+	return cat
 }
 
 func (c *Catalog) SidecarPath() string {
@@ -63,6 +89,8 @@ func (c *Catalog) LoadFromDisk() error {
 
 func (c *Catalog) saveToDiskLocked() error {
 	sidecar := c.SidecarPath()
+	tmpSidecar := sidecar + ".tmp"
+
 	wrapper := struct {
 		RootDir string                 `json:"root_dir"`
 		Entries map[string]*ImageEntry `json:"entries"`
@@ -76,16 +104,25 @@ func (c *Catalog) saveToDiskLocked() error {
 		return err
 	}
 
-	f, err := os.OpenFile(sidecar, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(tmpSidecar, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpSidecar)
 		return err
 	}
-	return f.Sync()
+
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpSidecar)
+		return err
+	}
+	_ = f.Close()
+
+	return os.Rename(tmpSidecar, sidecar)
 }
 
 func (c *Catalog) SaveToDisk() error {
