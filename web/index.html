@@ -1,0 +1,57 @@
+
+<div class="flex items-center gap-2 flex-grow justify-end max-w-xl">
+  <input id="searchInput" type="text" placeholder="Search tags or file names (-negative, +untagged)..." class="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 flex-grow focus:border-sky-500 focus:outline-none" oninput="applyFilters()" />
+  <button id="untaggedToggleBtn" onclick="toggleUntaggedOnly()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded text-xs font-semibold transition">
+    ★ Untagged
+  </button>
+  <button onclick="exitApp()" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-xs font-bold transition" title="Quit Server">
+    ✕
+  </button>
+</div>
+
+
+  <span id="selectionCount" class="text-xs font-mono text-zinc-400">0 selected</span>
+  <button onclick="selectVisible()" class="text-xs text-sky-400 hover:text-sky-300 underline font-medium">All Visible</button>
+  <button onclick="clearSelection()" class="text-xs text-zinc-400 hover:text-zinc-200 underline">Clear</button>
+
+  <div class="h-3 w-px bg-zinc-800 mx-1"></div>
+
+  <!-- Density & Page Size Controls -->
+  <div class="flex items-center border border-zinc-800 rounded overflow-hidden">
+    <button onclick="setDensity('dense')" id="denseBtn" class="px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-r border-zinc-800">S</button>
+    <button onclick="setDensity('standard')" id="stdBtn" class="px-2 py-0.5 text-[11px] bg-sky-700 text-white border-r border-zinc-800">M</button>
+    <button onclick="setDensity('large')" id="largeBtn" class="px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300">L</button>
+  </div>
+
+  <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="bg-zinc-900 border border-zinc-800 rounded text-[11px] px-1.5 py-0.5 text-zinc-300 focus:outline-none">
+    <option value="30">30 / page</option>
+    <option value="60">60 / page</option>
+    <option value="100" selected>100 / page</option>
+  </select>
+
+  <button id="slideshowTriggerBtn" onclick="startSlideshow()" class="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded text-xs font-semibold flex items-center gap-1 transition">
+    ▶ Slideshow
+  </button>
+</div>
+
+<!-- Active Palettes & Tag Input -->
+<div class="flex items-center gap-2 flex-grow justify-end max-w-xl">
+  <select id="presetSelect" onchange="handlePresetChange(this.value)" class="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-semibold focus:outline-none">
+  </select>
+  <button onclick="openPresetModal()" class="text-zinc-400 hover:text-zinc-200 text-xs px-1" title="Edit presets">⚙</button>
+  
+  <div id="palettePills" class="flex items-center gap-1 overflow-x-auto max-w-xs">
+    <!-- Hotkey pill tags render here -->
+  </div>
+
+  <div class="flex items-center gap-1">
+    <input id="customTagInput" type="text" placeholder="Add custom tags..." class="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 w-32 focus:w-44 transition-all focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') applyCustomTagInput()" />
+    <button onclick="applyCustomTagInput()" class="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition">Apply</button>
+  </div>
+</div>
+
+
+<div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 text-zinc-600">
+  <div class="text-4xl mb-2">📁</div>
+  <p class="text-sm">No images match your active view.</p>
+</div>

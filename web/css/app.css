@@ -1,0 +1,29 @@
+body {
+background-color: #000000;
+color: #e2e8f0;
+}
+
+::-webkit-scrollbar {
+width: 8px;
+height: 8px;
+}
+::-webkit-scrollbar-track {
+background: #000000;
+}
+::-webkit-scrollbar-thumb {
+background: #27272a;
+border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+background: #3f3f46;
+}
+
+.grid-dense {
+grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+}
+.grid-standard {
+grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.grid-large {
+grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}

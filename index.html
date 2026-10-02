@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Photo Tagger</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #000000; color: #e2e8f0; }
+    .grid-dense { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+    .grid-standard { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+    .grid-large { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans select-none bg-black text-slate-100">
+
+  <!-- ROW 1: System, Search, Directory Controls -->
+  <header class="sticky top-0 z-40 bg-black border-b border-zinc-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-lg">
+    <div class="flex items-center gap-2 flex-grow max-w-2xl">
+      <button onclick="pickFolder()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded text-xs font-semibold flex items-center gap-1 border border-zinc-700 transition">
+        📁 Choose
+      </button>
+      <input id="dirInput" type="text" placeholder="Folder path..." class="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 flex-grow font-mono focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') triggerScan()" />
+      <label class="flex items-center gap-1 text-[11px] text-zinc-400 cursor-pointer">
+        <input id="recursiveCheck" type="checkbox" class="accent-sky-500 rounded">
+        <span>Subfolders</span>
+      </label>
+      <button onclick="triggerScan()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition">
+        Scan
+      </button>
+    </div>
+
+    <div class="flex items-center gap-2 flex-grow justify-end max-w-xl">
+      <input id="searchInput" type="text" placeholder="Search tags or file names (-negative, +untagged)..." class="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 flex-grow focus:border-sky-500 focus:outline-none" oninput="applyFilters()" />
+      <button id="untaggedToggleBtn" onclick="toggleUntaggedOnly()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded text-xs font-semibold transition">
+        ★ Untagged
+      </button>
+      <button onclick="exitApp()" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-xs font-bold transition" title="Quit Server">
+        ✕
+      </button>
+    </div>
+  </header>
+
+  <!-- ROW 2: Breadcrumbs & Clickable Subfolders -->
+  <section class="bg-zinc-950 border-b border-zinc-900 px-3 py-1.5 flex flex-wrap items-center gap-2 text-xs">
+    <div id="breadcrumbBar" class="flex items-center gap-1 font-mono text-zinc-400 overflow-x-auto text-[11px]">
+      <span class="text-zinc-600">Path:</span>
+      <span class="text-zinc-500 italic">No folder loaded</span>
+    </div>
+    <div class="h-3 w-px bg-zinc-800 mx-1"></div>
+    <div id="subfolderBar" class="flex items-center gap-1.5 overflow-x-auto">
+      <!-- Child folders render here cleanly -->
+    </div>
+  </section>
+
+  <!-- ROW 3: Reorganized Toolbar (Palettes shifted Left, Custom Tag & Sizing right) -->
+  <section class="sticky top-[45px] z-30 bg-black/95 border-b border-zinc-800 px-3 py-1.5 flex flex-wrap items-center justify-between gap-3 backdrop-blur">
+    
+    <!-- Left Section: Mode, Palettes & Hotkey Pills -->
+    <div class="flex items-center gap-2 flex-wrap flex-grow max-w-4xl">
+      <button id="modeToggleBtn" onclick="toggleInteractionMode()" class="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded text-xs font-bold border border-zinc-700 flex items-center gap-1 transition">
+        <span id="modeIcon">🔍</span> <span id="modeLabel">Inspect</span>
+      </button>
+
+      <div class="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-0.5">
+        <span id="selectionCount" class="text-xs font-mono text-zinc-400">0 sel</span>
+        <button onclick="selectVisible()" class="text-[11px] text-sky-400 hover:text-sky-300 font-medium ml-1">All</button>
+        <button onclick="clearSelection()" class="text-[11px] text-zinc-500 hover:text-zinc-300 ml-1">Clr</button>
+      </div>
+
+      <div class="h-3 w-px bg-zinc-800 mx-0.5"></div>
+
+      <!-- Preset Dropdown & Settings shifted LEFT -->
+      <div class="flex items-center gap-1">
+        <select id="presetSelect" onchange="handlePresetChange(this.value)" class="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-semibold focus:outline-none">
+        </select>
+        <button onclick="openPresetModal()" class="text-zinc-400 hover:text-zinc-200 text-xs px-1" title="Edit palettes">⚙</button>
+      </div>
+
+      <!-- Roomy Hotkey Pills Display -->
+      <div id="palettePills" class="flex items-center gap-1.5 flex-wrap">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- Right Section: Slideshow, Custom Tag Entry, Grid & Page Sizes -->
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+      <button id="slideshowTriggerBtn" onclick="startSlideshow()" class="px-2 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded text-xs font-semibold flex items-center gap-1 transition">
+        ▶ Slideshow
+      </button>
+
+      <div class="flex items-center gap-1">
+        <input id="customTagInput" type="text" placeholder="+ Custom tag..." class="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 w-28 focus:w-40 transition-all focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') applyCustomTagInput()" />
+        <button onclick="applyCustomTagInput()" class="px-2 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition">Add</button>
+      </div>
+
+      <div class="h-3 w-px bg-zinc-800 mx-0.5"></div>
+
+      <!-- Density -->
+      <div class="flex items-center border border-zinc-800 rounded overflow-hidden">
+        <button onclick="setDensity('dense')" id="denseBtn" class="px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-r border-zinc-800">S</button>
+        <button onclick="setDensity('standard')" id="stdBtn" class="px-2 py-0.5 text-[11px] bg-sky-700 text-white border-r border-zinc-800">M</button>
+        <button onclick="setDensity('large')" id="largeBtn" class="px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300">L</button>
+      </div>
+
+      <!-- Page Size -->
+      <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="bg-zinc-900 border border-zinc-800 rounded text-[11px] px-1.5 py-0.5 text-zinc-300 focus:outline-none">
+        <option value="30">30</option>
+        <option value="60">60</option>
+        <option value="100" selected>100</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- MAIN PHOTO GRID AREA -->
+  <main class="flex-grow p-3 bg-black">
+    <div id="imageGrid" class="grid grid-standard gap-2.5"></div>
+    <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 text-zinc-600">
+      <div class="text-4xl mb-2">📁</div>
+      <p class="text-sm">No images match your active view.</p>
+    </div>
+  </main>
+
+  <!-- FOOTER PAGINATION -->
+  <footer class="sticky bottom-0 z-30 bg-black border-t border-zinc-900 px-4 py-2 flex items-center justify-between text-xs text-zinc-400">
+    <div id="statusBar">Loaded 0 items</div>
+    <div class="flex items-center gap-2">
+      <button onclick="changePage(-1)" id="prevPageBtn" class="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-xs disabled:opacity-30">Prev</button>
+      <span id="pageIndicator" class="font-mono text-zinc-300">Page 1 / 1</span>
+      <button onclick="changePage(1)" id="nextPageBtn" class="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-xs disabled:opacity-30">Next</button>
+    </div>
+  </footer>
+
+  <!-- FULLSCREEN LIGHTBOX & SLIDESHOW OVERLAY -->
+  <div id="lightbox" class="fixed inset-0 z-50 bg-black hidden flex flex-col">
+    <div class="flex items-center justify-between px-4 py-2 bg-zinc-950 border-b border-zinc-800">
+      <div class="flex items-center gap-3">
+        <span id="lbCounter" class="text-xs font-mono text-zinc-400">1 / 1</span>
+        <span id="lbFilename" class="text-xs font-mono text-zinc-200 font-bold truncate max-w-md"></span>
+        <button id="lbSlideshowToggle" onclick="toggleSlideshowPlayback()" class="ml-2 px-2.5 py-0.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-xs rounded">⏸ Pause</button>
+      </div>
+      <div class="flex items-center gap-4">
+        <label class="flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
+          <input type="checkbox" id="lbSelectCheckbox" class="accent-sky-500 rounded" onchange="toggleSelectFromLightbox()">
+          <span>Selected</span>
+        </label>
+        <button onclick="closeLightbox()" class="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-xs font-bold transition flex items-center gap-1 shadow-lg">
+          ✕ Close (Esc)
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-grow flex items-center justify-center relative p-4 overflow-hidden bg-black" onclick="handleLightboxClick(event)">
+      <div class="relative max-h-full max-w-full flex items-center justify-center p-2 rounded-lg border-2 border-zinc-800 bg-zinc-950 shadow-2xl">
+        <img id="lbImage" class="max-h-[82vh] max-w-[90vw] object-contain rounded" src="" />
+      </div>
+
+      <button onclick="navigateLightbox(-1)" class="absolute left-6 top-1/2 -translate-y-1/2 bg-zinc-900/80 hover:bg-zinc-800 text-white px-4 py-6 rounded-lg text-2xl border border-zinc-700 transition">‹</button>
+      <button onclick="navigateLightbox(1)" class="absolute right-6 top-1/2 -translate-y-1/2 bg-zinc-900/80 hover:bg-zinc-800 text-white px-4 py-6 rounded-lg text-2xl border border-zinc-700 transition">›</button>
+    </div>
+
+    <div class="p-3 bg-zinc-950 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+      <div id="lbTags" class="flex flex-wrap gap-1.5"></div>
+      <div class="flex items-center gap-1">
+        <input id="lbAddTagInput" type="text" placeholder="+ Tag..." class="bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs text-zinc-100 focus:outline-none" onkeydown="if(event.key==='Enter') addLightboxTag()" />
+        <button onclick="addLightboxTag()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRESET MANAGER MODAL -->
+  <div id="presetModal" class="fixed inset-0 z-50 bg-black/90 hidden flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-lg max-w-md w-full p-5 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-2">
+        <h3 class="font-bold text-sm text-zinc-100">Manage Tag Palettes</h3>
+        <button onclick="closePresetModal()" class="text-zinc-400 hover:text-white text-base">✕</button>
+      </div>
+      <div>
+        <label class="text-xs text-zinc-400">Current Palette</label>
+        <select id="modalPresetSelect" onchange="renderPresetModalTags()" class="w-full bg-zinc-950 border border-zinc-800 rounded p-2 text-xs text-zinc-200 mt-1"></select>
+      </div>
+      <div>
+        <label class="text-xs text-zinc-400">Tags in this Palette</label>
+        <div id="modalTagList" class="flex flex-wrap gap-1.5 p-2 bg-zinc-950 border border-zinc-800 rounded min-h-[60px] mt-1"></div>
+      </div>
+      <div class="flex gap-2">
+        <input id="modalNewTagInput" type="text" placeholder="Add tag to palette..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none" onkeydown="if(event.key==='Enter') addTagToCurrentPreset()" />
+        <button onclick="addTagToCurrentPreset()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 rounded text-xs font-bold text-white">Add</button>
+      </div>
+      <div class="border-t border-zinc-800 pt-3 flex justify-between">
+        <button onclick="createNewPresetPrompt()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-xs text-zinc-300">+ New Palette</button>
+        <button onclick="deleteCurrentPreset()" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-800 rounded text-xs text-rose-300">Delete Palette</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MINIMAL TOAST -->
+  <div id="toast" class="fixed bottom-12 right-4 z-50 bg-zinc-900 border border-zinc-700 text-zinc-200 px-3 py-2 rounded text-xs shadow-xl hidden"></div>
+
+  <script>
+    let allEntries = [];
+    let filteredEntries = [];
+    let selectedSet = new Set();
+    let currentDir = "";
+    let isSelectMode = false;
+    let untaggedOnly = false;
+
+    let currentPage = 1;
+    let pageSize = 100;
+
+    let lbIndex = 0;
+    let slideshowInterval = null;
+    let slideshowPool = [];
+
+    let presets = JSON.parse(localStorage.getItem("tag_presets")) || {
+      "Beach Wear": ["bikini", "onepiece", "tropikini", "beach", "sunset", "ocean"],
+      "Portraits": ["close-up", "smile", "bokeh", "studio", "fashion", "eyes"]
+    };
+    let activePresetKey = Object.keys(presets)[0] || "Beach Wear";
+
+    function showToast(msg, duration = 2500) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.classList.remove("hidden");
+      setTimeout(() => t.classList.add("hidden"), duration);
+    }
+
+    async function pickFolder() {
+      const res = await fetch("/api/pick-folder", { method: "POST" });
+      const data = await res.json();
+      if (data.path) {
+        document.getElementById("dirInput").value = data.path;
+        triggerScan();
+      }
+    }
+
+    async function triggerScan() {
+      const pathVal = document.getElementById("dirInput").value.trim();
+      const recVal = document.getElementById("recursiveCheck").checked;
+      if (!pathVal) return;
+
+      selectedSet.clear();
+      updateSelectionUI();
+      showToast("Scanning folder...");
+
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: pathVal, recursive: recVal })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        showToast("Scan Error: " + errText, 4000);
+        return;
+      }
+
+      const info = await res.json();
+      currentDir = info.root_dir;
+      await refreshBrowseNav(currentDir);
+      await loadEntries();
+    }
+
+    async function refreshBrowseNav(dir) {
+      if (!dir) return;
+      const res = await fetch(`/api/browse?dir=${encodeURIComponent(dir)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const bBar = document.getElementById("breadcrumbBar");
+      bBar.innerHTML = `<span class="text-zinc-600">Path:</span>`;
+      const segments = data.current_path.split("/").filter(Boolean);
+      let cumulative = data.current_path.startsWith("/") ? "" : "";
+      
+      segments.forEach((seg, idx) => {
+        cumulative += (cumulative ? "/" : (data.current_path.startsWith("/") ? "/" : "")) + seg;
+        const targetPath = cumulative;
+        const btn = document.createElement("button");
+        btn.className = "text-sky-400 hover:text-sky-300 font-mono hover:underline";
+        btn.textContent = seg;
+        btn.onclick = () => jumpToDirectory(targetPath);
+        bBar.appendChild(btn);
+        if (idx < segments.length - 1) {
+          const sep = document.createElement("span");
+          sep.className = "text-zinc-600";
+          sep.textContent = "/";
+          bBar.appendChild(sep);
+        }
+      });
+
+      const sBar = document.getElementById("subfolderBar");
+      sBar.innerHTML = "";
+      if (data.parent_path) {
+        const upBtn = document.createElement("button");
+        upBtn.className = "px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded text-[11px]";
+        upBtn.textContent = "⤴ Up";
+        upBtn.onclick = () => jumpToDirectory(data.parent_path);
+        sBar.appendChild(upBtn);
+      }
+
+      const folders = data.subfolders || [];
+      folders.forEach(sub => {
+        const folderName = sub.name || sub.Name || "Folder";
+        const folderPath = sub.path || sub.Path || "";
+        if (!folderPath) return;
+
+        const btn = document.createElement("button");
+        btn.className = "px-2 py-0.5 bg-zinc-900 hover:bg-sky-950 border border-zinc-800 hover:border-sky-800 text-zinc-300 hover:text-sky-300 rounded text-[11px] flex items-center gap-1 transition";
+        btn.innerHTML = `📁 <span>${folderName}</span>`;
+        btn.onclick = () => jumpToDirectory(folderPath);
+        sBar.appendChild(btn);
+      });
+    }
+
+    function jumpToDirectory(path) {
+      document.getElementById("dirInput").value = path;
+      triggerScan();
+    }
+
+    async function loadEntries() {
+      const res = await fetch("/api/entries");
+      allEntries = await res.json();
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const query = document.getElementById("searchInput").value.trim().toLowerCase();
+      const terms = query.split(/\s+/).filter(Boolean);
+
+      filteredEntries = allEntries.filter(item => {
+        if (untaggedOnly && item.tags && item.tags.length > 0) {
+          return false;
+        }
+
+        const tagsLower = (item.tags || []).map(t => t.toLowerCase());
+        const fileNameLower = item.file_name.toLowerCase();
+
+        for (const term of terms) {
+          if (term.startsWith("-")) {
+            const neg = term.slice(1);
+            if (neg && (tagsLower.includes(neg) || fileNameLower.includes(neg))) {
+              return false;
+            }
+          } else {
+            const matchedTag = tagsLower.some(t => t.includes(term));
+            const matchedName = fileNameLower.includes(term);
+            if (!matchedTag && !matchedName) {
+              return false;
+            }
+          }
+        }
+        return true;
+      });
+
+      currentPage = 1;
+      renderGrid();
+    }
+
+    function renderGrid() {
+      const grid = document.getElementById("imageGrid");
+      grid.innerHTML = "";
+
+      const start = (currentPage - 1) * pageSize;
+      const end = start + pageSize;
+      const pageItems = filteredEntries.slice(start, end);
+
+      document.getElementById("emptyState").classList.toggle("hidden", filteredEntries.length > 0);
+      document.getElementById("statusBar").textContent = `Showing ${pageItems.length} of ${filteredEntries.length} photos (Catalog: ${allEntries.length})`;
+      
+      const totalPages = Math.ceil(filteredEntries.length / pageSize) || 1;
+      document.getElementById("pageIndicator").textContent = `Page ${currentPage} / ${totalPages}`;
+      document.getElementById("prevPageBtn").disabled = currentPage <= 1;
+      document.getElementById("nextPageBtn").disabled = currentPage >= totalPages;
+
+      pageItems.forEach(item => {
+        const isSelected = selectedSet.has(item.relative_path);
+        const card = document.createElement("div");
+        card.className = `group relative rounded border bg-zinc-950 overflow-hidden flex flex-col transition cursor-pointer ${isSelected ? "border-sky-500 ring-2 ring-sky-500/50" : "border-zinc-800 hover:border-zinc-600"}`;
+        
+        card.onclick = () => handleCardClick(item.relative_path);
+
+        const imgContainer = document.createElement("div");
+        imgContainer.className = "aspect-square w-full bg-zinc-900 overflow-hidden relative";
+
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.src = `/api/image?file=${encodeURIComponent(item.relative_path)}`;
+        img.className = "w-full h-full object-cover group-hover:scale-105 transition duration-200";
+
+        const checkBtn = document.createElement("button");
+        checkBtn.className = `absolute top-1.5 right-1.5 w-5 h-5 rounded border flex items-center justify-center text-xs transition ${isSelected ? "bg-sky-600 border-sky-400 text-white font-bold" : "border-zinc-600 bg-black/60 text-transparent hover:border-zinc-300"}`;
+        checkBtn.innerHTML = "✓";
+        checkBtn.onclick = (e) => {
+          e.stopPropagation();
+          toggleSelect(item.relative_path);
+        };
+
+        imgContainer.appendChild(img);
+        imgContainer.appendChild(checkBtn);
+
+        const info = document.createElement("div");
+        info.className = "p-1.5 flex flex-col gap-1";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "text-[11px] font-mono text-zinc-300 truncate";
+        nameSpan.textContent = item.file_name;
+
+        const tagContainer = document.createElement("div");
+        tagContainer.className = "flex flex-wrap gap-1";
+
+        (item.tags || []).forEach(t => {
+          const pill = document.createElement("span");
+          pill.className = "text-[10px] bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-1.5 py-0.2 flex items-center gap-1";
+          pill.innerHTML = `<span>${t}</span><button class="text-zinc-500 hover:text-zinc-200" onclick="event.stopPropagation(); removeTag('${item.relative_path}', '${t}')">✕</button>`;
+          tagContainer.appendChild(pill);
+        });
+
+        info.appendChild(nameSpan);
+        info.appendChild(tagContainer);
+        card.appendChild(imgContainer);
+        card.appendChild(info);
+        grid.appendChild(card);
+      });
+    }
+
+    function handleCardClick(rel) {
+      if (isSelectMode) {
+        toggleSelect(rel);
+      } else {
+        openLightbox(rel);
+      }
+    }
+
+    function toggleInteractionMode() {
+      isSelectMode = !isSelectMode;
+      const btn = document.getElementById("modeToggleBtn");
+      const icon = document.getElementById("modeIcon");
+      const label = document.getElementById("modeLabel");
+
+      if (isSelectMode) {
+        btn.className = "px-2 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold border border-sky-400 flex items-center gap-1 transition shadow-lg shadow-sky-600/30";
+        icon.textContent = "☑";
+        label.textContent = "Select";
+      } else {
+        btn.className = "px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded text-xs font-bold border border-zinc-700 flex items-center gap-1 transition";
+        icon.textContent = "🔍";
+        label.textContent = "Inspect";
+      }
+    }
+
+    function toggleSelect(rel) {
+      if (selectedSet.has(rel)) {
+        selectedSet.delete(rel);
+      } else {
+        selectedSet.add(rel);
+      }
+      updateSelectionUI();
+    }
+
+    function selectVisible() {
+      const start = (currentPage - 1) * pageSize;
+      const end = start + pageSize;
+      filteredEntries.slice(start, end).forEach(item => selectedSet.add(item.relative_path));
+      updateSelectionUI();
+    }
+
+    function clearSelection() {
+      selectedSet.clear();
+      updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+      document.getElementById("selectionCount").textContent = `${selectedSet.size} sel`;
+      renderGrid();
+    }
+
+    function setDensity(mode) {
+      const g = document.getElementById("imageGrid");
+      g.className = `grid grid-${mode} gap-2.5`;
+      document.getElementById("denseBtn").className = mode === 'dense' ? "px-2 py-0.5 text-[11px] bg-sky-700 text-white border-r border-zinc-800" : "px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-r border-zinc-800";
+      document.getElementById("stdBtn").className = mode === 'standard' ? "px-2 py-0.5 text-[11px] bg-sky-700 text-white border-r border-zinc-800" : "px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-r border-zinc-800";
+      document.getElementById("largeBtn").className = mode === 'large' ? "px-2 py-0.5 text-[11px] bg-sky-700 text-white" : "px-2 py-0.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300";
+    }
+
+    function changePageSize(val) {
+      pageSize = parseInt(val, 10);
+      currentPage = 1;
+      renderGrid();
+    }
+
+    function changePage(delta) {
+      currentPage += delta;
+      renderGrid();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function toggleUntaggedOnly() {
+      untaggedOnly = !untaggedOnly;
+      const btn = document.getElementById("untaggedToggleBtn");
+      btn.className = untaggedOnly 
+        ? "px-2.5 py-1 bg-amber-600 text-white rounded text-xs font-bold transition"
+        : "px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded text-xs font-semibold transition";
+      applyFilters();
+    }
+
+    async function applyTagBatch(tags) {
+      if (selectedSet.size === 0) {
+        showToast("Select at least 1 photo first");
+        return;
+      }
+
+      const paths = Array.from(selectedSet);
+      const res = await fetch("/api/tags/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relative_paths: paths, tags: tags })
+      });
+
+      if (res.ok) {
+        showToast(`Tagged ${paths.length} photos`);
+        await loadEntries();
+      } else {
+        showToast("Failed to apply tags", 3000);
+      }
+    }
+
+    async function applyCustomTagInput() {
+      const val = document.getElementById("customTagInput").value.trim();
+      if (!val) return;
+      const tags = val.split(",").map(t => t.trim()).filter(Boolean);
+      await applyTagBatch(tags);
+      document.getElementById("customTagInput").value = "";
+    }
+
+    async function removeTag(rel, tag) {
+      const res = await fetch("/api/tags/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relative_path: rel, tag: tag })
+      });
+      if (res.ok) {
+        await loadEntries();
+      }
+    }
+
+    // PRESET ENGINE
+    function renderPresetSelector() {
+      const sel = document.getElementById("presetSelect");
+      sel.innerHTML = "";
+      Object.keys(presets).forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        if (name === activePresetKey) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      renderPresetPills();
+    }
+
+    function renderPresetPills() {
+      const container = document.getElementById("palettePills");
+      container.innerHTML = "";
+      const currentTags = presets[activePresetKey] || [];
+
+      currentTags.slice(0, 9).forEach((t, idx) => {
+        const btn = document.createElement("button");
+        btn.className = "px-2 py-0.5 bg-zinc-900 hover:bg-sky-950 border border-zinc-800 hover:border-sky-700 text-zinc-300 hover:text-sky-300 rounded text-xs font-mono flex items-center gap-1 transition";
+        btn.innerHTML = `<span class="text-zinc-600 font-bold">[${idx + 1}]</span> <span>${t}</span>`;
+        btn.onclick = () => applyTagBatch([t]);
+        container.appendChild(btn);
+      });
+    }
+
+    function handlePresetChange(val) {
+      activePresetKey = val;
+      renderPresetPills();
+    }
+
+    // SLIDESHOW & LIGHTBOX
+    function startSlideshow() {
+      if (selectedSet.size > 0) {
+        slideshowPool = filteredEntries.filter(e => selectedSet.has(e.relative_path));
+      } else {
+        slideshowPool = [...filteredEntries];
+      }
+
+      if (slideshowPool.length === 0) {
+        showToast("No images available for slideshow");
+        return;
+      }
+
+      lbIndex = 0;
+      openLightboxWithIndex(0);
+      playSlideshowLoop();
+    }
+
+    function playSlideshowLoop() {
+      clearInterval(slideshowInterval);
+      document.getElementById("lbSlideshowToggle").textContent = "⏸ Pause";
+      slideshowInterval = setInterval(() => {
+        navigateLightbox(1);
+      }, 3000);
+    }
+
+    function toggleSlideshowPlayback() {
+      if (slideshowInterval) {
+        clearInterval(slideshowInterval);
+        slideshowInterval = null;
+        document.getElementById("lbSlideshowToggle").textContent = "▶ Play";
+      } else {
+        playSlideshowLoop();
+      }
+    }
+
+    function openLightbox(rel) {
+      slideshowPool = [...filteredEntries];
+      const idx = slideshowPool.findIndex(e => e.relative_path === rel);
+      openLightboxWithIndex(idx !== -1 ? idx : 0);
+    }
+
+    function openLightboxWithIndex(index) {
+      lbIndex = index;
+      const item = slideshowPool[lbIndex];
+      if (!item) return;
+
+      const lb = document.getElementById("lightbox");
+      lb.classList.remove("hidden");
+
+      document.getElementById("lbCounter").textContent = `${lbIndex + 1} / ${slideshowPool.length}`;
+      document.getElementById("lbFilename").textContent = item.file_name;
+      document.getElementById("lbImage").src = `/api/image?file=${encodeURIComponent(item.relative_path)}`;
+      document.getElementById("lbSelectCheckbox").checked = selectedSet.has(item.relative_path);
+
+      renderLightboxTags(item);
+    }
+
+    function renderLightboxTags(item) {
+      const container = document.getElementById("lbTags");
+      container.innerHTML = "";
+      (item.tags || []).forEach(t => {
+        const pill = document.createElement("span");
+        pill.className = "text-xs bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-0.5 flex items-center gap-1.5";
+        pill.innerHTML = `<span>${t}</span><button class="text-zinc-500 hover:text-white" onclick="removeLightboxTag('${t}')">✕</button>`;
+        container.appendChild(pill);
+      });
+    }
+
+    function navigateLightbox(delta) {
+      lbIndex = (lbIndex + delta + slideshowPool.length) % slideshowPool.length;
+      openLightboxWithIndex(lbIndex);
+    }
+
+    function closeLightbox() {
+      clearInterval(slideshowInterval);
+      slideshowInterval = null;
+      document.getElementById("lightbox").classList.add("hidden");
+      renderGrid();
+    }
+
+    function toggleSelectFromLightbox() {
+      const item = slideshowPool[lbIndex];
+      if (!item) return;
+      toggleSelect(item.relative_path);
+    }
+
+    async function addLightboxTag() {
+      const input = document.getElementById("lbAddTagInput");
+      const val = input.value.trim();
+      if (!val) return;
+      const item = slideshowPool[lbIndex];
+      if (!item) return;
+
+      await fetch("/api/tags/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relative_paths: [item.relative_path], tags: [val] })
+      });
+
+      input.value = "";
+      await loadEntries();
+      const updated = allEntries.find(e => e.relative_path === item.relative_path);
+      if (updated) {
+        slideshowPool[lbIndex] = updated;
+        renderLightboxTags(updated);
+      }
+    }
+
+    async function removeLightboxTag(tag) {
+      const item = slideshowPool[lbIndex];
+      if (!item) return;
+
+      await fetch("/api/tags/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relative_path: item.relative_path, tag: tag })
+      });
+
+      await loadEntries();
+      const updated = allEntries.find(e => e.relative_path === item.relative_path);
+      if (updated) {
+        slideshowPool[lbIndex] = updated;
+        renderLightboxTags(updated);
+      }
+    }
+
+    // PRESET MODAL UTILITIES
+    function openPresetModal() {
+      const m = document.getElementById("presetModal");
+      m.classList.remove("hidden");
+      const sel = document.getElementById("modalPresetSelect");
+      sel.innerHTML = "";
+      Object.keys(presets).forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        if (name === activePresetKey) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      renderPresetModalTags();
+    }
+
+    function closePresetModal() {
+      document.getElementById("presetModal").classList.add("hidden");
+      localStorage.setItem("tag_presets", JSON.stringify(presets));
+      renderPresetSelector();
+    }
+
+    function renderPresetModalTags() {
+      const selName = document.getElementById("modalPresetSelect").value;
+      const list = document.getElementById("modalTagList");
+      list.innerHTML = "";
+      (presets[selName] || []).forEach(t => {
+        const pill = document.createElement("span");
+        pill.className = "text-xs bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-0.5 flex items-center gap-1.5";
+        pill.innerHTML = `<span>${t}</span><button class="text-zinc-500 hover:text-white" onclick="deleteTagFromPreset('${selName}', '${t}')">✕</button>`;
+        list.appendChild(pill);
+      });
+    }
+
+    function addTagToCurrentPreset() {
+      const selName = document.getElementById("modalPresetSelect").value;
+      const inp = document.getElementById("modalNewTagInput");
+      const val = inp.value.trim().toLowerCase();
+      if (!val) return;
+      if (!presets[selName].includes(val)) {
+        presets[selName].push(val);
+      }
+      inp.value = "";
+      renderPresetModalTags();
+    }
+
+    function deleteTagFromPreset(preset, tag) {
+      presets[preset] = presets[preset].filter(t => t !== tag);
+      renderPresetModalTags();
+    }
+
+    function createNewPresetPrompt() {
+      const name = prompt("Enter new palette name:");
+      if (name && !presets[name]) {
+        presets[name] = [];
+        activePresetKey = name;
+        openPresetModal();
+      }
+    }
+
+    function deleteCurrentPreset() {
+      const selName = document.getElementById("modalPresetSelect").value;
+      if (Object.keys(presets).length <= 1) {
+        alert("You must keep at least one palette.");
+        return;
+      }
+      delete presets[selName];
+      activePresetKey = Object.keys(presets)[0];
+      openPresetModal();
+    }
+
+    // HOTKEYS
+    window.addEventListener("keydown", (e) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.tagName === "SELECT")) {
+        return;
+      }
+
+      if (!document.getElementById("lightbox").classList.contains("hidden")) {
+        if (e.key === "ArrowRight") navigateLightbox(1);
+        if (e.key === "ArrowLeft") navigateLightbox(-1);
+        if (e.key === "Escape") closeLightbox();
+        if (e.key === " ") {
+          e.preventDefault();
+          toggleSelectFromLightbox();
+        }
+      }
+
+      if (e.key >= "1" && e.key <= "9") {
+        const idx = parseInt(e.key, 10) - 1;
+        const currentTags = presets[activePresetKey] || [];
+        if (idx < currentTags.length) {
+          applyTagBatch([currentTags[idx]]);
+        }
+      }
+
+      if (e.key.toLowerCase() === "t") {
+        toggleInteractionMode();
+      }
+    });
+
+    async function exitApp() {
+      if (confirm("Close Photo Tagger backend server?")) {
+        try { await fetch("/api/shutdown"); } catch(e){}
+        window.close();
+      }
+    }
+
+    renderPresetSelector();
+  </script>
+</body>
+</html>
