@@ -6,6 +6,7 @@ let slideshowInterval = null;
 let currentSpeed = 3500;
 let isShuffled = false;
 let lbPanZoom = null;
+let savedScrollY = 0;
 
 function ensureLightboxPanZoom() {
   if (!lbPanZoom) {
@@ -17,18 +18,22 @@ function ensureLightboxPanZoom() {
   }
 }
 
-// Single Inspection Mode (via Grid click)
+// Single Inspection Mode (via Grid click) -> Populate FULL folder view
 function openLightbox(relPath) {
   if (!filteredEntries || filteredEntries.length === 0) return;
-  const idx = filteredEntries.findIndex(e => e.relative_path === relPath);
   
-  // Wrap single selection context
-  currentDeckList = [{
+  // Save active scroll position
+  savedScrollY = window.scrollY;
+
+  // Populate deck with ALL filtered entries from current folder
+  currentDeckList = filteredEntries.map(e => ({
     dir: currentDir,
-    relative_path: filteredEntries[idx].relative_path,
-    file_name: filteredEntries[idx].file_name
-  }];
-  deckCursor = 0;
+    relative_path: e.relative_path,
+    file_name: e.file_name
+  }));
+
+  const idx = currentDeckList.findIndex(e => e.relative_path === relPath);
+  deckCursor = idx !== -1 ? idx : 0;
 
   launchViewerModal(false);
 }
@@ -40,6 +45,7 @@ function startDeckSlideshow() {
     return;
   }
 
+  savedScrollY = window.scrollY;
   currentDeckList = isShuffled ? shuffleArray([...deck]) : [...deck];
   deckCursor = 0;
 
@@ -51,9 +57,9 @@ function launchViewerModal(isSlideshowMode) {
   const lb = document.getElementById("lightbox");
   lb.classList.remove("hidden");
 
-  // Occlude background DOM to reclaim GPU and Compositor RAM
+  // Keep layout intact to preserve scroll position, but hide visually from paint
   const mainArea = document.getElementById("mainGridArea");
-  if (mainArea) mainArea.style.display = "none";
+  if (mainArea) mainArea.style.visibility = "hidden";
 
   const controls = document.getElementById("deckSlideshowControls");
   if (controls) controls.classList.toggle("hidden", !isSlideshowMode);
@@ -68,8 +74,12 @@ function closeLightbox() {
   const lb = document.getElementById("lightbox");
   lb.classList.add("hidden");
 
+  // Restore grid visibility and scroll position
   const mainArea = document.getElementById("mainGridArea");
-  if (mainArea) mainArea.style.display = "";
+  if (mainArea) {
+    mainArea.style.visibility = "";
+    window.scrollTo({ top: savedScrollY, behavior: "instant" });
+  }
 
   const img = document.getElementById("lbImage");
   if (img) img.src = ""; // Purge GPU texture immediately
@@ -221,6 +231,7 @@ function toggleSelectFromLightbox() {
   document.getElementById("lbSelectCheckbox").checked = selectedSet.has(item.relative_path);
 }
 
+// Targeted in-place tag update (Zero page jump)
 async function addLightboxTag() {
   const inp = document.getElementById("lbAddTagInput");
   const val = inp.value.trim().toLowerCase();
@@ -236,9 +247,14 @@ async function addLightboxTag() {
   });
 
   inp.value = "";
-  await loadEntries();
-  const refreshed = allEntries.find(e => e.relative_path === item.relative_path);
-  renderLightboxTags(refreshed ? refreshed.tags : []);
+  
+  // Update internal catalog in memory directly without rerendering grid
+  const target = allEntries.find(e => e.relative_path === item.relative_path);
+  if (target) {
+    target.tags = Array.from(new Set([...(target.tags || []), ...tags]));
+    renderLightboxTags(target.tags);
+    updateCardTagsInGrid(item.relative_path, target.tags);
+  }
 }
 
 async function removeTagFromLightbox(tag) {
@@ -250,7 +266,11 @@ async function removeTagFromLightbox(tag) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dir: item.dir, relative_path: item.relative_path, tag })
   });
-  await loadEntries();
-  const refreshed = allEntries.find(e => e.relative_path === item.relative_path);
-  renderLightboxTags(refreshed ? refreshed.tags : []);
+
+  const target = allEntries.find(e => e.relative_path === item.relative_path);
+  if (target) {
+    target.tags = (target.tags || []).filter(t => t !== tag);
+    renderLightboxTags(target.tags);
+    updateCardTagsInGrid(item.relative_path, target.tags);
+  }
 }

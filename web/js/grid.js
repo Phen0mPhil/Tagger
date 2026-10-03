@@ -27,9 +27,9 @@ function renderGrid() {
   pageItems.forEach(item => {
     const isSelected = selectedSet.has(item.relative_path);
     const card = document.createElement("div");
+    card.dataset.rel = item.relative_path;
     card.className = `group relative rounded border bg-zinc-950 overflow-hidden flex flex-col transition cursor-pointer select-none ${isSelected ? "border-sky-500 ring-2 ring-sky-500/50" : "border-zinc-800 hover:border-zinc-600"}`;
     
-    // Explicit click routing: click image/card -> lightbox; click select box -> toggle select
     card.addEventListener("click", (e) => {
       if (e.target.closest(".select-btn") || e.target.closest(".tag-remove-btn")) {
         return;
@@ -69,7 +69,7 @@ function renderGrid() {
     nameSpan.textContent = item.file_name;
 
     const tagContainer = document.createElement("div");
-    tagContainer.className = "flex flex-wrap gap-1";
+    tagContainer.className = "card-tags flex flex-wrap gap-1";
 
     (item.tags || []).forEach(t => {
       const pill = document.createElement("span");
@@ -85,6 +85,24 @@ function renderGrid() {
   });
 }
 
+function updateCardTagsInGrid(relPath, tags) {
+  const cards = document.querySelectorAll("#imageGrid > div");
+  cards.forEach(card => {
+    if (card.dataset.rel === relPath) {
+      const tagContainer = card.querySelector(".card-tags");
+      if (tagContainer) {
+        tagContainer.innerHTML = "";
+        (tags || []).forEach(t => {
+          const pill = document.createElement("span");
+          pill.className = "text-[10px] bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-1.5 py-0.2 flex items-center gap-1";
+          pill.innerHTML = `<span>${t}</span><button class="tag-remove-btn text-zinc-500 hover:text-zinc-200" onclick="event.stopPropagation(); removeTag('${relPath}', '${t}')">✕</button>`;
+          tagContainer.appendChild(pill);
+        });
+      }
+    }
+  });
+}
+
 function toggleInteractionMode() {
   isSelectMode = !isSelectMode;
   const btn = document.getElementById("modeToggleBtn");
@@ -94,11 +112,11 @@ function toggleInteractionMode() {
   if (isSelectMode) {
     btn.className = "px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold border border-sky-400 flex items-center gap-1 transition shadow-lg shadow-sky-600/30";
     icon.textContent = "☑";
-    label.textContent = "Select";
+    label.textContent = "Select Mode";
   } else {
     btn.className = "px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded text-xs font-bold border border-zinc-700 flex items-center gap-1 transition";
-    icon.textContent = "🔍";
-    label.textContent = "Inspect";
+    icon.textContent = "🖼";
+    label.textContent = "View Mode";
   }
 }
 
@@ -165,9 +183,20 @@ function clearSearch() {
   }
 }
 
+function clearExclude() {
+  const excl = document.getElementById("excludeInput");
+  if (excl) {
+    excl.value = "";
+    applyFilters();
+  }
+}
+
 function applyFilters() {
   const query = (document.getElementById("searchInput").value || "").trim().toLowerCase();
-  const terms = query.split(/\s+/).filter(Boolean);
+  const excludeQuery = (document.getElementById("excludeInput")?.value || "").trim().toLowerCase();
+
+  const includeTerms = query.split(/\s+/).filter(Boolean);
+  const excludeTerms = excludeQuery.split(/\s+/).filter(Boolean);
 
   filteredEntries = allEntries.filter(item => {
     if (untaggedOnly && item.tags && item.tags.length > 0) return false;
@@ -175,7 +204,13 @@ function applyFilters() {
     const tagsLower = (item.tags || []).map(t => t.toLowerCase());
     const fileNameLower = item.file_name.toLowerCase();
 
-    for (const term of terms) {
+    // 1. Explicit Exclude Filter
+    for (const ex of excludeTerms) {
+      if (tagsLower.includes(ex) || fileNameLower.includes(ex)) return false;
+    }
+
+    // 2. Main Search Bar
+    for (const term of includeTerms) {
       if (term.startsWith("-")) {
         const neg = term.slice(1);
         if (neg && (tagsLower.includes(neg) || fileNameLower.includes(neg))) return false;

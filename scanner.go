@@ -22,24 +22,34 @@ ext := strings.ToLower(filepath.Ext(path))
 return validImageExtensions[ext]
 }
 
+func loadDiskTagsForDir(dirPath string) map[string][]string {
+tags := make(map[string][]string)
+sidecar := filepath.Join(dirPath, "catalog.json")
+data, err := os.ReadFile(sidecar)
+if err != nil {
+return tags
+}
+
+var diskData struct {
+Entries map[string]*ImageEntry `json:"entries"`
+}
+if err := json.Unmarshal(data, &diskData); err == nil && diskData.Entries != nil {
+for k, v := range diskData.Entries {
+cleanKey := filepath.ToSlash(filepath.Clean(k))
+cleanKey = strings.TrimPrefix(cleanKey, "./")
+tags[cleanKey] = v.Tags
+}
+}
+return tags
+}
+
 func (c *Catalog) Scan(recursive bool) (int, error) {
 c.mu.Lock()
 defer c.mu.Unlock()
 
-diskTags := make(map[string][]string)
-sidecar := c.SidecarPath()
-if data, err := os.ReadFile(sidecar); err == nil {
-var diskData struct {
-Entries map[string]*ImageEntry `json:"entries"`
-}
-if jsonErr := json.Unmarshal(data, &diskData); jsonErr == nil && diskData.Entries != nil {
-for k, v := range diskData.Entries {
-cleanKey := filepath.ToSlash(filepath.Clean(k))
-cleanKey = strings.TrimPrefix(cleanKey, "./")
-diskTags[cleanKey] = v.Tags
-}
-}
-}
+// Cache tag sidecars per directory to prevent repeated reads
+dirSidecarCache := make(map[string]map[string][]string)
+dirSidecarCache[c.RootDir] = loadDiskTagsForDir(c.RootDir)
 
 newEntries := make(map[string]*ImageEntry)
 discoveredCount := 0
@@ -59,6 +69,8 @@ return filepath.SkipDir
 if !recursive {
 return filepath.SkipDir
 }
+// Preload sidecar tags for this subfolder
+dirSidecarCache[path] = loadDiskTagsForDir(path)
 return nil
 }
 
@@ -87,8 +99,18 @@ FileSize:     size,
 Tags:         []string{},
 }
 
-if existing, ok := diskTags[cleanRel]; ok {
+// 1. Try finding tag in root catalog
+if existing, ok := dirSidecarCache[c.RootDir][cleanRel]; ok && len(existing) > 0 {
 entry.Tags = existing
+} else {
+// 2. Try finding tag in subfolder's own catalog.json
+parentDir := filepath.Dir(path)
+if subTags, exists := dirSidecarCache[parentDir]; exists {
+subRel := filepath.ToSlash(filepath.Clean(d.Name()))
+if foundTags, ok := subTags[subRel]; ok {
+entry.Tags = foundTags
+}
+}
 }
 
 newEntries[cleanRel] = entry

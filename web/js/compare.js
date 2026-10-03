@@ -1,7 +1,7 @@
 // Isolated Compare Controller
 
-const paneA = { dir: "", entries: [], index: 0, pz: null };
-const paneB = { dir: "", entries: [], index: 0, pz: null };
+const paneA = { dir: "", entries: [], index: 0, pz: null, nav: null };
+const paneB = { dir: "", entries: [], index: 0, pz: null, nav: null };
 let tagTarget = "B";
 
 let presets = JSON.parse(localStorage.getItem("tag_presets")) || {
@@ -16,6 +16,19 @@ async function initCompare() {
   paneA.pz = createPanZoom(document.getElementById("containerA"), document.getElementById("imgA"));
   paneB.pz = createPanZoom(document.getElementById("containerB"), document.getElementById("imgB"));
 
+  // Instantiate decoupled directory navigators
+  paneA.nav = createDirectoryNavigator({
+    breadcrumbEl: document.getElementById("breadcrumbBarA"),
+    subfolderEl: document.getElementById("subfolderBarA"),
+    onNavigate: (newPath) => loadDirectoryIntoPane("A", newPath)
+  });
+
+  paneB.nav = createDirectoryNavigator({
+    breadcrumbEl: document.getElementById("breadcrumbBarB"),
+    subfolderEl: document.getElementById("subfolderBarB"),
+    onNavigate: (newPath) => loadDirectoryIntoPane("B", newPath)
+  });
+
   paneA.pz.onSync((s, x, y) => {
     if (document.getElementById("syncZoomCheck").checked && paneB.pz) {
       paneB.pz.setTransform(s, x, y);
@@ -28,7 +41,7 @@ async function initCompare() {
     }
   });
 
-  renderComparePalette();
+  renderComparePresetSelector();
 
   if (initialDir) {
     await loadDirectoryIntoPane("A", initialDir);
@@ -59,7 +72,10 @@ async function loadDirectoryIntoPane(paneKey, dir) {
     p.index = 0;
     if (p.pz) p.pz.reset();
     renderPane(paneKey);
-    await refreshSubfolders(paneKey, dir);
+
+    if (p.nav) {
+      await p.nav.update(dir);
+    }
   } catch (err) {
     console.error("Load pane failed:", err);
   }
@@ -70,10 +86,7 @@ function renderPane(paneKey) {
   const imgEl = document.getElementById(`img${paneKey}`);
   const counterEl = document.getElementById(`counter${paneKey}`);
   const fileEl = document.getElementById(`fileName${paneKey}`);
-  const pathEl = document.getElementById(`pathLabel${paneKey}`);
   const tagsListEl = document.getElementById(`tagsList${paneKey}`);
-
-  pathEl.textContent = p.dir || "No folder selected";
 
   if (!p.entries || p.entries.length === 0) {
     imgEl.src = "";
@@ -105,45 +118,22 @@ function navPane(paneKey, delta) {
   renderPane(paneKey);
 }
 
-async function refreshSubfolders(paneKey, dir) {
-  try {
-    const res = await fetch(`/api/browse?dir=${encodeURIComponent(dir)}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const bar = document.getElementById(`subfolderBar${paneKey}`);
-    bar.innerHTML = "";
-
-    if (data.parent_path) {
-      const up = document.createElement("button");
-      up.className = "px-1.5 py-0.2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 rounded text-[10px]";
-      up.textContent = "⤴ Up";
-      up.onclick = () => loadDirectoryIntoPane(paneKey, data.parent_path);
-      bar.appendChild(up);
-    }
-
-    data.subfolders.forEach(sub => {
-      const b = document.createElement("button");
-      b.className = "px-1.5 py-0.2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded text-[10px] truncate max-w-[120px]";
-      b.textContent = `📁 ${sub.name}`;
-      b.onclick = () => loadDirectoryIntoPane(paneKey, sub.path);
-      bar.appendChild(b);
-    });
-  } catch (err) {
-    console.error(err);
-  }
-}
-
 async function pickDirectoryForPane(paneKey) {
   try {
     const res = await fetch("/api/pick-folder", { method: "POST" });
-    const data = await res.json();
-    if (data.path) {
-      await loadDirectoryIntoPane(paneKey, data.path);
-      return;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.path && data.path.trim()) {
+        await loadDirectoryIntoPane(paneKey, data.path.trim());
+        return;
+      }
     }
-  } catch (err) {}
+  } catch (err) {
+    console.warn("Picker call failed:", err);
+  }
 
-  const manual = prompt("Paste folder path for Pane " + paneKey + ":");
+  const current = paneKey === "A" ? paneA.dir : paneB.dir;
+  const manual = prompt(`Folder path for Pane ${paneKey}:`, current || "");
   if (manual && manual.trim()) {
     await loadDirectoryIntoPane(paneKey, manual.trim());
   }
@@ -168,8 +158,8 @@ function swapPanes() {
   renderPane("A");
   renderPane("B");
 
-  if (paneA.dir) refreshSubfolders("A", paneA.dir);
-  if (paneB.dir) refreshSubfolders("B", paneB.dir);
+  if (paneA.nav && paneA.dir) paneA.nav.update(paneA.dir);
+  if (paneB.nav && paneB.dir) paneB.nav.update(paneB.dir);
 }
 
 function setTagTarget(target) {
@@ -191,18 +181,108 @@ function setTagTarget(target) {
   }
 }
 
+function renderComparePresetSelector() {
+  const sel = document.getElementById("comparePresetSelect");
+  if (!sel) return;
+  sel.innerHTML = "";
+  Object.keys(presets).forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === activePresetKey) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  renderComparePalette();
+}
+
+function handleComparePresetChange(val) {
+  activePresetKey = val;
+  renderComparePalette();
+}
+
 function renderComparePalette() {
   const container = document.getElementById("comparePaletteContainer");
+  if (!container) return;
   container.innerHTML = "";
   const currentTags = presets[activePresetKey] || [];
 
   currentTags.slice(0, 20).forEach(tag => {
     const btn = document.createElement("button");
-    btn.className = "px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-200 rounded text-xs font-medium transition shrink-0";
+    btn.className = "px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 text-zinc-200 rounded text-xs font-medium transition shrink-0";
     btn.textContent = tag;
     btn.onclick = () => applyTagToTarget([tag]);
     container.appendChild(btn);
   });
+}
+
+function openComparePresetModal() {
+  const m = document.getElementById("comparePresetModal");
+  m.classList.remove("hidden");
+  const sel = document.getElementById("modalComparePresetSelect");
+  sel.innerHTML = "";
+  Object.keys(presets).forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === activePresetKey) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  renderComparePresetModalTags();
+}
+
+function closeComparePresetModal() {
+  document.getElementById("comparePresetModal").classList.add("hidden");
+  localStorage.setItem("tag_presets", JSON.stringify(presets));
+  renderComparePresetSelector();
+}
+
+function renderComparePresetModalTags() {
+  const selName = document.getElementById("modalComparePresetSelect").value;
+  const list = document.getElementById("modalCompareTagList");
+  list.innerHTML = "";
+  (presets[selName] || []).forEach(t => {
+    const pill = document.createElement("span");
+    pill.className = "text-xs bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-0.5 flex items-center gap-1.5";
+    pill.innerHTML = `<span>${t}</span><button class="text-zinc-500 hover:text-white" onclick="deleteTagFromComparePreset('${selName}', '${t}')">✕</button>`;
+    list.appendChild(pill);
+  });
+}
+
+function addTagToCurrentComparePreset() {
+  const selName = document.getElementById("modalComparePresetSelect").value;
+  const inp = document.getElementById("modalCompareNewTagInput");
+  const val = inp.value.trim().toLowerCase();
+  if (!val) return;
+  if (!presets[selName].includes(val)) {
+    presets[selName].push(val);
+  }
+  inp.value = "";
+  renderComparePresetModalTags();
+}
+
+function deleteTagFromComparePreset(preset, tag) {
+  presets[preset] = presets[preset].filter(t => t !== tag);
+  renderComparePresetModalTags();
+}
+
+function createNewComparePresetPrompt() {
+  const name = prompt("Enter new palette name:");
+  if (name && !presets[name]) {
+    presets[name] = [];
+    activePresetKey = name;
+    openComparePresetModal();
+  }
+}
+
+function deleteCurrentComparePreset() {
+  const selName = document.getElementById("modalComparePresetSelect").value;
+  if (Object.keys(presets).length <= 1) {
+    alert("You must keep at least one palette.");
+    return;
+  }
+  delete presets[selName];
+  activePresetKey = Object.keys(presets)[0];
+  openComparePresetModal();
 }
 
 async function applyTagToTarget(tags) {

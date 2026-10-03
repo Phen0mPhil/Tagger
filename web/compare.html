@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/css/app.css">
   <style>
     body { background-color: #000000; color: #e2e8f0; overflow: hidden; }
-    .viewport-img { max-height: calc(100vh - 210px); max-width: 100%; object-fit: contain; }
+    .viewport-img { max-height: calc(100vh - 225px); max-width: 100%; object-fit: contain; }
   </style>
 </head>
 <body class="h-screen w-screen flex flex-col font-sans select-none bg-black text-slate-100">
@@ -37,12 +37,13 @@
 
     <!-- PANE A -->
     <section id="paneA" class="flex flex-col h-full bg-black relative overflow-hidden">
-      <div class="bg-zinc-950/90 border-b border-zinc-800 px-3 py-1.5 flex flex-col gap-1 z-20">
+      <!-- Pane A Navigation Bar -->
+      <div class="bg-zinc-950/95 border-b border-zinc-800 px-3 py-1 flex flex-col gap-1 z-20">
         <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5 flex-grow truncate">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-sky-400 bg-sky-950/60 border border-sky-800/80 px-1.5 py-0.2 rounded">Left</span>
-            <button onclick="pickDirectoryForPane('A')" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200">📁 Change</button>
-            <span id="pathLabelA" class="font-mono text-[11px] text-zinc-400 truncate">No folder</span>
+          <div class="flex items-center gap-1.5 flex-grow min-w-0">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-sky-400 bg-sky-950/60 border border-sky-800/80 px-1.5 py-0.2 rounded shrink-0">Left</span>
+            <button onclick="pickDirectoryForPane('A')" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200 shrink-0">📁 Change</button>
+            <div id="breadcrumbBarA" class="flex items-center gap-1 text-[11px] overflow-x-auto truncate"></div>
           </div>
           <span id="counterA" class="text-xs font-mono text-zinc-400 shrink-0">0 / 0</span>
         </div>
@@ -63,12 +64,13 @@
 
     <!-- PANE B -->
     <section id="paneB" class="flex flex-col h-full bg-black relative overflow-hidden">
-      <div class="bg-zinc-950/90 border-b border-zinc-800 px-3 py-1.5 flex flex-col gap-1 z-20">
+      <!-- Pane B Navigation Bar -->
+      <div class="bg-zinc-950/95 border-b border-zinc-800 px-3 py-1 flex flex-col gap-1 z-20">
         <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5 flex-grow truncate">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.2 rounded">Right</span>
-            <button onclick="pickDirectoryForPane('B')" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200">📁 Change</button>
-            <span id="pathLabelB" class="font-mono text-[11px] text-zinc-400 truncate">No folder</span>
+          <div class="flex items-center gap-1.5 flex-grow min-w-0">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.2 rounded shrink-0">Right</span>
+            <button onclick="pickDirectoryForPane('B')" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-[11px] text-zinc-200 shrink-0">📁 Change</button>
+            <div id="breadcrumbBarB" class="flex items-center gap-1 text-[11px] overflow-x-auto truncate"></div>
           </div>
           <span id="counterB" class="text-xs font-mono text-zinc-400 shrink-0">0 / 0</span>
         </div>
@@ -92,23 +94,57 @@
   <!-- DOCKED TAGGING STATION -->
   <footer class="bg-zinc-950 border-t border-zinc-800 px-4 py-2 flex flex-wrap items-center justify-between gap-3 z-40">
     <div class="flex items-center gap-2">
-      <span class="text-xs font-bold text-zinc-400 uppercase tracking-wider text-[11px]">Apply Tags To:</span>
+      <span class="text-xs font-bold text-zinc-400 uppercase tracking-wider text-[11px]">Target:</span>
       <div class="flex items-center bg-zinc-900 border border-zinc-800 rounded p-0.5">
         <button id="targetBtnA" onclick="setTagTarget('A')" class="px-2.5 py-0.5 rounded text-xs font-semibold text-zinc-400 hover:text-white transition">Pane A</button>
         <button id="targetBtnB" onclick="setTagTarget('B')" class="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-600 text-white shadow transition">Pane B</button>
-        <button id="targetBtnBoth" onclick="setTagTarget('BOTH')" class="px-2.5 py-0.5 rounded text-xs font-semibold text-zinc-400 hover:text-white transition">Both A & B</button>
+        <button id="targetBtnBoth" onclick="setTagTarget('BOTH')" class="px-2.5 py-0.5 rounded text-xs font-semibold text-zinc-400 hover:text-white transition">Both</button>
+      </div>
+
+      <div class="h-3 w-px bg-zinc-800 mx-1"></div>
+
+      <div class="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5">
+        <select id="comparePresetSelect" onchange="handleComparePresetChange(this.value)" class="bg-transparent text-xs text-zinc-200 font-semibold focus:outline-none cursor-pointer"></select>
+        <button onclick="openComparePresetModal()" class="text-zinc-400 hover:text-zinc-200 text-xs px-1" title="Edit palettes">⚙</button>
       </div>
     </div>
 
-    <div id="comparePaletteContainer" class="flex items-center gap-1.5 overflow-x-auto max-w-2xl py-0.5"></div>
+    <div id="comparePaletteContainer" class="flex items-center gap-1.5 overflow-x-auto max-w-xl py-0.5"></div>
 
     <div class="flex items-center gap-1.5">
-      <input id="compareCustomTagInput" type="text" placeholder="Custom tags (comma separated)..." class="bg-black border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 w-48 focus:w-60 transition-all focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') applyCustomCompareTag()" />
+      <input id="compareCustomTagInput" type="text" placeholder="Custom tags..." class="bg-black border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 w-44 focus:w-56 transition-all focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') applyCustomCompareTag()" />
       <button onclick="applyCustomCompareTag()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition">Apply</button>
     </div>
   </footer>
 
+  <!-- PRESET MANAGER MODAL -->
+  <div id="comparePresetModal" class="fixed inset-0 z-50 bg-black/80 hidden flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-lg max-w-md w-full p-4 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-2">
+        <h3 class="font-bold text-sm text-zinc-100">Manage Tag Palettes</h3>
+        <button onclick="closeComparePresetModal()" class="text-zinc-400 hover:text-white">✕</button>
+      </div>
+      <div>
+        <label class="text-xs text-zinc-400">Current Palette</label>
+        <select id="modalComparePresetSelect" onchange="renderComparePresetModalTags()" class="w-full bg-zinc-950 border border-zinc-800 rounded p-1.5 text-xs text-zinc-200 mt-1"></select>
+      </div>
+      <div>
+        <label class="text-xs text-zinc-400">Tags in this Palette</label>
+        <div id="modalCompareTagList" class="flex flex-wrap gap-1.5 p-2 bg-zinc-950 border border-zinc-800 rounded min-h-[60px] mt-1"></div>
+      </div>
+      <div class="flex gap-2">
+        <input id="modalCompareNewTagInput" type="text" placeholder="Add tag to palette..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 focus:outline-none" onkeydown="if(event.key==='Enter') addTagToCurrentComparePreset()" />
+        <button onclick="addTagToCurrentComparePreset()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 rounded text-xs font-bold text-white">Add</button>
+      </div>
+      <div class="border-t border-zinc-800 pt-3 flex justify-between">
+        <button onclick="createNewComparePresetPrompt()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-xs text-zinc-300">+ New Palette</button>
+        <button onclick="deleteCurrentComparePreset()" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-800 rounded text-xs text-rose-300">Delete Palette</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/panzoom.js"></script>
+  <script src="/js/nav.js"></script>
   <script src="/js/compare.js"></script>
 </body>
 </html>
