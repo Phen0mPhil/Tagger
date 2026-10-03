@@ -6,7 +6,7 @@ The application runs as a lightweight local daemon, launches your default browse
 
 ---
 
-## 🌟 What's New in v1.1.0
+## 🌟 What's New in v1.2.0
 
 * **⚖ Standalone Dual-Pane Comparison Sandbox (`compare.html`):** Air-gapped side-by-side photo inspection in an isolated tab. Supports folder quick-hops, synchronized zoom/pan mirroring, instant pane swapping (`⇄ Swap Sides`), and targeted tagging stations (`Pane A`, `Pane B`, or `Both`).
 * **🗂 Persistent Cross-Directory Staging Deck:** Stage photos across completely different folders into an persistent sequence queue. Supports intentional duplicate queuing, sequence inspection trays, and live slideshow execution without losing your working grid selection.

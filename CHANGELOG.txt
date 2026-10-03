@@ -2,7 +2,7 @@
 PHOTO TAGGER — VERSION CHANGELOG
 ================================================================================
 
-v1.1.0 (2026-10-03)
+v1.2.0 (2026-10-03)
 --------------------------------------------------------------------------------
 MAJOR FEATURES:
 • Standalone Dual-Pane Comparison Workspace (compare.html & compare.js):
