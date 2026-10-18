@@ -1,4 +1,3 @@
-// Standalone PanZoom Viewport Instance Factory (Focal Point Zoom)
 function createPanZoom(container, img) {
   if (!container || !img) return null;
 
@@ -30,16 +29,15 @@ function createPanZoom(container, img) {
   }
 
   container.addEventListener("wheel", (e) => {
+    if (img.classList.contains("hidden")) return;
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.2 : 0.83;
     const newScale = Math.min(Math.max(0.8, scale * factor), 8.0);
 
-    // Focal zoom: calculate mouse position relative to container
     const rect = container.getBoundingClientRect();
     const mouseX = e.clientX - rect.left - rect.width / 2;
     const mouseY = e.clientY - rect.top - rect.height / 2;
 
-    // Adjust pan coordinates so the pixel under cursor stays stationary
     panX -= (mouseX - panX) * (newScale / scale - 1);
     panY -= (mouseY - panY) * (newScale / scale - 1);
     scale = newScale;
@@ -49,6 +47,7 @@ function createPanZoom(container, img) {
   }, { passive: false });
 
   container.addEventListener("mousedown", (e) => {
+    if (img.classList.contains("hidden")) return;
     if (e.button !== 0) return;
     isDragging = true;
     startX = e.clientX - panX;
@@ -71,6 +70,7 @@ function createPanZoom(container, img) {
   });
 
   container.addEventListener("dblclick", () => {
+    if (img.classList.contains("hidden")) return;
     reset();
     if (onSyncCallback) onSyncCallback(scale, panX, panY);
   });

@@ -9,28 +9,12 @@ function renderPresetSelector() {
     if (name === activePresetKey) opt.selected = true;
     sel.appendChild(opt);
   });
-  renderPresetPills();
-}
-
-function renderPresetPills() {
-  const container = document.getElementById("palettePills");
-  if (!container) return;
-  container.innerHTML = "";
-  const currentTags = presets[activePresetKey] || [];
-
-  // Expanded to 20 clickable tags with clean styling
-  currentTags.slice(0, 20).forEach(tag => {
-    const btn = document.createElement("button");
-    btn.className = "px-2.5 py-1 bg-zinc-900 hover:bg-sky-950 border border-zinc-800 hover:border-sky-600 text-zinc-200 hover:text-sky-300 rounded text-xs font-medium transition shrink-0";
-    btn.textContent = tag;
-    btn.onclick = () => applyTagBatch([tag]);
-    container.appendChild(btn);
-  });
+  if (window.mainTagDock) window.mainTagDock.setPalette(activePresetKey);
 }
 
 function handlePresetChange(val) {
   activePresetKey = val;
-  renderPresetPills();
+  if (window.mainTagDock) window.mainTagDock.setPalette(val);
 }
 
 function openPresetModal() {
@@ -60,8 +44,8 @@ function renderPresetModalTags() {
   list.innerHTML = "";
   (presets[selName] || []).forEach(t => {
     const pill = document.createElement("span");
-    pill.className = "text-xs bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-0.5 flex items-center gap-1.5";
-    pill.innerHTML = `<span>${t}</span><button class="text-zinc-500 hover:text-white" onclick="deleteTagFromPreset('${selName}', '${t}')">✕</button>`;
+    pill.className = "text-xs bg-zinc-900 border border-zinc-800 text-zinc-200 rounded px-2.5 py-1 flex items-center gap-2";
+    pill.innerHTML = `<span>${t}</span><button class="text-zinc-500 hover:text-white font-bold" onclick="deleteTagFromPreset('${selName}', '${t}')">✕</button>`;
     list.appendChild(pill);
   });
 }
@@ -101,4 +85,26 @@ function deleteCurrentPreset() {
   delete presets[selName];
   activePresetKey = Object.keys(presets)[0];
   openPresetModal();
+}
+
+function renameCurrentPalette() {
+  const sel = document.getElementById("modalPresetSelect");
+  const inp = document.getElementById("renamePaletteInput");
+  const oldName = sel.value;
+  const newName = inp.value.trim();
+
+  if (!newName || newName === oldName) return;
+  if (presets[newName]) {
+    alert("A palette with that name already exists.");
+    return;
+  }
+
+  presets[newName] = presets[oldName];
+  delete presets[oldName];
+  activePresetKey = newName;
+
+  localStorage.setItem("tag_presets", JSON.stringify(presets));
+  openPresetModal();
+  renderPresetSelector();
+  showToast(`Palette renamed to '${newName}'`);
 }

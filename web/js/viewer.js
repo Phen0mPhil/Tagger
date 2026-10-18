@@ -1,168 +1,162 @@
-// Isolated Viewer & Deck Slideshow Engine
-
 let currentDeckList = [];
 let deckCursor = 0;
 let slideshowInterval = null;
 let currentSpeed = 3500;
+let currentVideoPlayRate = 1.0;
 let isShuffled = false;
-let lbPanZoom = null;
-let savedScrollY = 0;
 
-function ensureLightboxPanZoom() {
-  if (!lbPanZoom) {
-    const container = document.getElementById("lbImageContainer");
-    const img = document.getElementById("lbImage");
-    if (container && img) {
-      lbPanZoom = createPanZoom(container, img);
-    }
-  }
+function formatSlideTime(secs) {
+  const m = Math.floor(secs / 60) || 0;
+  const s = Math.floor(secs % 60) || 0;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-// Single Inspection Mode (via Grid click) -> Populate FULL folder view
-function openLightbox(relPath) {
-  if (!filteredEntries || filteredEntries.length === 0) return;
-  
-  // Save active scroll position
-  savedScrollY = window.scrollY;
-
-  // Populate deck with ALL filtered entries from current folder
-  currentDeckList = filteredEntries.map(e => ({
-    dir: currentDir,
-    relative_path: e.relative_path,
-    file_name: e.file_name
-  }));
-
-  const idx = currentDeckList.findIndex(e => e.relative_path === relPath);
-  deckCursor = idx !== -1 ? idx : 0;
-
-  launchViewerModal(false);
-}
-
-// Sequence Mode (via Deck)
 function startDeckSlideshow() {
   if (!deck || deck.length === 0) {
-    showToast("Deck is empty. Add photos with [+ Deck] first.");
+    showToast("Playlist is empty. Select photos or videos first.");
     return;
   }
 
-  savedScrollY = window.scrollY;
   currentDeckList = isShuffled ? shuffleArray([...deck]) : [...deck];
   deckCursor = 0;
 
-  launchViewerModal(true);
+  const modal = document.getElementById("slideshowModal");
+  if (modal) modal.classList.remove("hidden");
+
+  renderSlideshowSlide();
   playSlideshowLoop();
 }
 
-function launchViewerModal(isSlideshowMode) {
-  const lb = document.getElementById("lightbox");
-  lb.classList.remove("hidden");
-
-  // Keep layout intact to preserve scroll position, but hide visually from paint
-  const mainArea = document.getElementById("mainGridArea");
-  if (mainArea) mainArea.style.visibility = "hidden";
-
-  const controls = document.getElementById("deckSlideshowControls");
-  if (controls) controls.classList.toggle("hidden", !isSlideshowMode);
-
-  ensureLightboxPanZoom();
-  if (lbPanZoom) lbPanZoom.reset();
-  renderCurrentSlide();
-}
-
-function closeLightbox() {
+function closeSlideshowModal() {
   stopSlideshow();
-  const lb = document.getElementById("lightbox");
-  lb.classList.add("hidden");
-
-  // Restore grid visibility and scroll position
-  const mainArea = document.getElementById("mainGridArea");
-  if (mainArea) {
-    mainArea.style.visibility = "";
-    window.scrollTo({ top: savedScrollY, behavior: "instant" });
+  const modal = document.getElementById("slideshowModal");
+  if (modal) modal.classList.add("hidden");
+  
+  const img = document.getElementById("ssImage");
+  if (img) img.src = "";
+  
+  const vid = document.getElementById("ssVideo");
+  if (vid) {
+    vid.pause();
+    vid.src = "";
+    vid.onended = null;
+    vid.ontimeupdate = null;
+    vid.dataset.loadedSrc = "";
+    vid.classList.add("hidden");
   }
 
-  const img = document.getElementById("lbImage");
-  if (img) img.src = ""; // Purge GPU texture immediately
-
-  if (lbPanZoom) lbPanZoom.reset();
+  const progBar = document.getElementById("ssVideoProgressBar");
+  if (progBar) progBar.classList.add("hidden");
 }
 
-function renderCurrentSlide() {
+function renderSlideshowSlide() {
   if (currentDeckList.length === 0) {
-    closeLightbox();
+    closeSlideshowModal();
     return;
   }
 
   const item = currentDeckList[deckCursor];
-  document.getElementById("lbCounter").textContent = `${deckCursor + 1} / ${currentDeckList.length}`;
-  document.getElementById("lbFilename").textContent = item.file_name;
+  document.getElementById("ssCounter").textContent = `${deckCursor + 1} / ${currentDeckList.length}`;
+  document.getElementById("ssFilename").textContent = item.file_name;
 
-  const img = document.getElementById("lbImage");
-  img.src = `/api/image?dir=${encodeURIComponent(item.dir)}&file=${encodeURIComponent(item.relative_path)}`;
+  const img = document.getElementById("ssImage");
+  const vid = document.getElementById("ssVideo");
+  const photoSpeedGroup = document.getElementById("ssPhotoSpeedGroup");
+  const videoSpeedGroup = document.getElementById("ssVideoSpeedGroup");
+  const progBar = document.getElementById("ssVideoProgressBar");
+  const seekEl = document.getElementById("ssVideoSeek");
+  const timeEl = document.getElementById("ssVideoTime");
 
-  document.getElementById("lbSelectCheckbox").checked = selectedSet.has(item.relative_path);
+  const src = `/api/image?dir=${encodeURIComponent(item.dir)}&file=${encodeURIComponent(item.relative_path)}`;
 
-  // Sync tags if item belongs to active directory
-  const activeEntry = allEntries.find(e => e.relative_path === item.relative_path);
-  renderLightboxTags(activeEntry ? activeEntry.tags : []);
+  if (isVideoFile(item.file_name)) {
+    img.classList.add("hidden");
+    img.src = "";
+    vid.classList.remove("hidden");
+
+    if (photoSpeedGroup) photoSpeedGroup.classList.add("hidden");
+    if (videoSpeedGroup) videoSpeedGroup.classList.remove("hidden");
+    if (progBar) progBar.classList.remove("hidden");
+
+    vid.loop = currentDeckList.length === 1;
+    vid.onended = () => {
+      if (slideshowInterval) navigateSlideshow(1);
+    };
+    vid.ontimeupdate = () => {
+      if (!vid.duration) return;
+      const pct = (vid.currentTime / vid.duration) * 100;
+      if (seekEl) seekEl.value = pct;
+      if (timeEl) timeEl.textContent = `${formatSlideTime(vid.currentTime)} / ${formatSlideTime(vid.duration)}`;
+    };
+    if (seekEl) {
+      seekEl.oninput = (e) => {
+        e.stopPropagation();
+        if (!vid.duration) return;
+        vid.currentTime = (seekEl.value / 100) * vid.duration;
+      };
+    }
+
+    if (vid.dataset.loadedSrc !== src) {
+      vid.dataset.loadedSrc = src;
+      if (seekEl) seekEl.value = 0;
+      if (timeEl) timeEl.textContent = "0:00 / 0:00";
+      vid.src = src;
+      vid.load();
+      vid.playbackRate = currentVideoPlayRate;
+      vid.play().then(() => {
+        vid.playbackRate = currentVideoPlayRate;
+      }).catch(() => {});
+    } else {
+      vid.playbackRate = currentVideoPlayRate;
+    }
+  } else {
+    vid.pause();
+    vid.onended = null;
+    vid.ontimeupdate = null;
+    vid.dataset.loadedSrc = "";
+    vid.classList.add("hidden");
+    vid.src = "";
+
+    if (videoSpeedGroup) videoSpeedGroup.classList.add("hidden");
+    if (photoSpeedGroup) photoSpeedGroup.classList.remove("hidden");
+    if (progBar) progBar.classList.add("hidden");
+
+    img.classList.remove("hidden");
+    img.src = src;
+  }
 }
 
-function renderLightboxTags(tags) {
-  const tagsContainer = document.getElementById("lbTags");
-  tagsContainer.innerHTML = "";
-  (tags || []).forEach(t => {
-    const pill = document.createElement("span");
-    pill.className = "text-xs bg-zinc-900 border border-zinc-700 text-zinc-200 rounded px-2 py-0.5 flex items-center gap-1.5";
-    pill.innerHTML = `<span>${t}</span><button class="text-zinc-500 hover:text-white" onclick="removeTagFromLightbox('${t}')">✕</button>`;
-    tagsContainer.appendChild(pill);
-  });
-}
-
-function navigateLightbox(delta) {
+function navigateSlideshow(delta) {
   if (currentDeckList.length === 0) return;
   deckCursor = (deckCursor + delta + currentDeckList.length) % currentDeckList.length;
-  if (lbPanZoom) lbPanZoom.reset();
-  renderCurrentSlide();
+  renderSlideshowSlide();
 }
 
-// In-Viewer Live Pruning (Del key or button)
-function evictCurrentSlideFromDeck() {
-  if (currentDeckList.length === 0) return;
-  const currentItem = currentDeckList[deckCursor];
-
-  // Remove from master deck if matching
-  const masterIdx = deck.findIndex(d => d.dir === currentItem.dir && d.relative_path === currentItem.relative_path);
-  if (masterIdx !== -1) {
-    removeDeckItem(masterIdx);
-  }
-
-  // Remove from active playback deck
-  currentDeckList.splice(deckCursor, 1);
-  if (deckCursor >= currentDeckList.length) {
-    deckCursor = 0;
-  }
-
-  showToast("Removed from Deck");
-  if (currentDeckList.length === 0) {
-    closeLightbox();
-  } else {
-    renderCurrentSlide();
-  }
-}
-
-// Timer & Speed Engine
 function setSlideshowSpeed(ms) {
   currentSpeed = ms;
   document.querySelectorAll(".speedBtn").forEach(btn => {
-    btn.classList.toggle("bg-sky-600", parseInt(btn.dataset.speed, 10) === ms);
-    btn.classList.toggle("text-white", parseInt(btn.dataset.speed, 10) === ms);
-    btn.classList.toggle("bg-zinc-900", parseInt(btn.dataset.speed, 10) !== ms);
-    btn.classList.toggle("text-zinc-400", parseInt(btn.dataset.speed, 10) !== ms);
+    const active = parseInt(btn.dataset.speed, 10) === ms;
+    btn.classList.toggle("bg-sky-600", active);
+    btn.classList.toggle("text-white", active);
+    btn.classList.toggle("bg-zinc-900", !active);
+    btn.classList.toggle("text-zinc-400", !active);
   });
 
-  if (slideshowInterval) {
-    playSlideshowLoop();
-  }
+  if (slideshowInterval) playSlideshowLoop();
+}
+
+function setSlideshowVideoSpeed(rate) {
+  currentVideoPlayRate = rate;
+  const vid = document.getElementById("ssVideo");
+  if (vid) vid.playbackRate = rate;
+
+  document.querySelectorAll(".ssVidRateBtn").forEach(btn => {
+    const active = parseFloat(btn.dataset.rate) === rate;
+    btn.classList.toggle("bg-rose-600", active);
+    btn.classList.toggle("text-white", active);
+    btn.classList.toggle("bg-zinc-900", !active);
+    btn.classList.toggle("text-zinc-400", !active);
+  });
 }
 
 function toggleShuffle() {
@@ -176,7 +170,7 @@ function toggleShuffle() {
   if (isShuffled) {
     currentDeckList = shuffleArray([...currentDeckList]);
     deckCursor = 0;
-    renderCurrentSlide();
+    renderSlideshowSlide();
   }
 }
 
@@ -190,9 +184,17 @@ function shuffleArray(arr) {
 
 function playSlideshowLoop() {
   clearInterval(slideshowInterval);
-  document.getElementById("lbSlideshowToggle").textContent = "⏸ Pause";
+  const btn = document.getElementById("ssToggleBtn");
+  if (btn) btn.textContent = "⏸ Pause";
+  const vid = document.getElementById("ssVideo");
+  if (vid && !vid.classList.contains("hidden") && vid.paused) {
+    vid.playbackRate = currentVideoPlayRate;
+    vid.play().catch(() => {});
+  }
   slideshowInterval = setInterval(() => {
-    navigateLightbox(1);
+    const activeVid = document.getElementById("ssVideo");
+    if (activeVid && !activeVid.classList.contains("hidden")) return;
+    navigateSlideshow(1);
   }, currentSpeed);
 }
 
@@ -200,77 +202,24 @@ function stopSlideshow() {
   if (slideshowInterval) {
     clearInterval(slideshowInterval);
     slideshowInterval = null;
-    const btn = document.getElementById("lbSlideshowToggle");
-    if (btn) btn.textContent = "▶ Play";
+  }
+  const btn = document.getElementById("ssToggleBtn");
+  if (btn) btn.textContent = "▶ Play";
+  const vid = document.getElementById("ssVideo");
+  if (vid && !vid.classList.contains("hidden")) {
+    vid.pause();
   }
 }
 
 function toggleSlideshowPlayback() {
-  if (slideshowInterval) {
-    stopSlideshow();
-  } else {
-    playSlideshowLoop();
-  }
+  if (slideshowInterval) stopSlideshow();
+  else playSlideshowLoop();
 }
 
-function handleLightboxClick(e) {
-  if (e.target.id === "lbImage") return;
+function handleSlideshowClick(e) {
+  if (e.target.id === "ssImage" || e.target.id === "ssVideo" || e.target.closest("#ssVideoProgressBar")) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
-  if (clickX < rect.width / 2) {
-    navigateLightbox(-1);
-  } else {
-    navigateLightbox(1);
-  }
-}
-
-function toggleSelectFromLightbox() {
-  const item = currentDeckList[deckCursor];
-  if (!item) return;
-  toggleSelect(item.relative_path);
-  document.getElementById("lbSelectCheckbox").checked = selectedSet.has(item.relative_path);
-}
-
-// Targeted in-place tag update (Zero page jump)
-async function addLightboxTag() {
-  const inp = document.getElementById("lbAddTagInput");
-  const val = inp.value.trim().toLowerCase();
-  if (!val) return;
-  const item = currentDeckList[deckCursor];
-  if (!item) return;
-
-  const tags = val.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
-  await fetch("/api/tags/add", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dir: item.dir, relative_paths: [item.relative_path], tags })
-  });
-
-  inp.value = "";
-  
-  // Update internal catalog in memory directly without rerendering grid
-  const target = allEntries.find(e => e.relative_path === item.relative_path);
-  if (target) {
-    target.tags = Array.from(new Set([...(target.tags || []), ...tags]));
-    renderLightboxTags(target.tags);
-    updateCardTagsInGrid(item.relative_path, target.tags);
-  }
-}
-
-async function removeTagFromLightbox(tag) {
-  const item = currentDeckList[deckCursor];
-  if (!item) return;
-
-  await fetch("/api/tags/remove", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dir: item.dir, relative_path: item.relative_path, tag })
-  });
-
-  const target = allEntries.find(e => e.relative_path === item.relative_path);
-  if (target) {
-    target.tags = (target.tags || []).filter(t => t !== tag);
-    renderLightboxTags(target.tags);
-    updateCardTagsInGrid(item.relative_path, target.tags);
-  }
+  if (clickX < rect.width / 2) navigateSlideshow(-1);
+  else navigateSlideshow(1);
 }

@@ -8,18 +8,39 @@ import (
 "strings"
 )
 
-var validImageExtensions = map[string]bool{
-".jpg":  true,
-".jpeg": true,
-".png":  true,
-".webp": true,
-".gif":  true,
-".bmp":  true,
+var validMediaExtensions = map[string]string{
+".jpg":  "image",
+".jpeg": "image",
+".png":  "image",
+".webp": "image",
+".gif":  "image",
+".bmp":  "image",
+".mp4":  "video",
+".mov":  "video",
+".webm": "video",
+".m4v":  "video",
 }
 
-func isImageFile(path string) bool {
+func getMediaType(path string) string {
 ext := strings.ToLower(filepath.Ext(path))
-return validImageExtensions[ext]
+return validMediaExtensions[ext]
+}
+
+func isSupportedMedia(path string) bool {
+return getMediaType(path) != ""
+}
+
+func shouldSkipDir(name string) bool {
+lower := strings.ToLower(name)
+if strings.HasPrefix(lower, ".") || strings.HasPrefix(lower, "$") {
+return true
+}
+switch lower {
+case "junk", "_junk", "trash", "_trash", "quarantine", "_quarantined":
+return true
+default:
+return false
+}
 }
 
 func loadDiskTagsForDir(dirPath string) map[string][]string {
@@ -47,7 +68,6 @@ func (c *Catalog) Scan(recursive bool) (int, error) {
 c.mu.Lock()
 defer c.mu.Unlock()
 
-// Cache tag sidecars per directory to prevent repeated reads
 dirSidecarCache := make(map[string]map[string][]string)
 dirSidecarCache[c.RootDir] = loadDiskTagsForDir(c.RootDir)
 
@@ -63,18 +83,17 @@ if d.IsDir() {
 if path == c.RootDir {
 return nil
 }
-if strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "$") {
+if shouldSkipDir(d.Name()) {
 return filepath.SkipDir
 }
 if !recursive {
 return filepath.SkipDir
 }
-// Preload sidecar tags for this subfolder
 dirSidecarCache[path] = loadDiskTagsForDir(path)
 return nil
 }
 
-if !isImageFile(d.Name()) {
+if !isSupportedMedia(d.Name()) {
 return nil
 }
 
@@ -99,11 +118,9 @@ FileSize:     size,
 Tags:         []string{},
 }
 
-// 1. Try finding tag in root catalog
 if existing, ok := dirSidecarCache[c.RootDir][cleanRel]; ok && len(existing) > 0 {
 entry.Tags = existing
 } else {
-// 2. Try finding tag in subfolder's own catalog.json
 parentDir := filepath.Dir(path)
 if subTags, exists := dirSidecarCache[parentDir]; exists {
 subRel := filepath.ToSlash(filepath.Clean(d.Name()))

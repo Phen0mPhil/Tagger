@@ -5,272 +5,349 @@
   <title>Photo Tagger</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/css/app.css">
+  <style>
+    select option { background-color: #09090b !important; color: #f4f4f5 !important; }
+    .dropdown:hover .dropdown-menu { display: block; }
+  </style>
 </head>
-<body class="min-h-screen flex flex-col font-sans select-none bg-black text-slate-100">
+<body class="h-screen w-screen flex flex-col font-sans select-none bg-black text-slate-100 text-sm overflow-hidden">
 
-  <!-- ROW 1: Folder Selection, Path Input, Search & Negative Exclusion -->
-  <header class="sticky top-0 z-40 bg-black/95 border-b border-zinc-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-lg backdrop-blur">
-    
-    <div class="flex items-center gap-1.5 flex-grow max-w-lg">
-      <button onclick="pickFolder()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-100 rounded text-xs font-semibold flex items-center gap-1 border border-zinc-700 transition shrink-0">
-        📁 Choose
-      </button>
-      
-      <input id="dirInput" type="text" placeholder="Folder path..." class="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-100 font-mono flex-grow focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') triggerScan()" />
-
-      <label class="flex items-center gap-1 text-[11px] text-zinc-400 cursor-pointer shrink-0">
-        <input id="recursiveCheck" type="checkbox" class="accent-sky-500 rounded">
-        <span>Deep</span>
+  <!-- UNIFIED MASTER HEADER -->
+  <header class="sticky top-0 z-40 bg-black/95 shadow-2xl backdrop-blur border-b border-zinc-800 px-4 py-2.5 flex items-center justify-between gap-3 shrink-0">
+    <div class="flex items-center gap-2 flex-wrap flex-grow min-w-0">
+      <button onclick="pickFolder()" class="px-4 py-2.5 bg-teal-950 hover:bg-teal-900 text-teal-200 rounded-lg border border-teal-700 text-sm font-black transition shadow shrink-0" title="Open directory picker">📁</button>
+      <label class="flex items-center gap-1.5 text-xs text-zinc-300 font-bold cursor-pointer shrink-0 px-1">
+        <input id="recursiveCheck" type="checkbox" onchange="rescanWorkspaces()" class="accent-rose-500 rounded h-4 w-4">
+        <span>All Folders</span>
       </label>
-      
-      <button onclick="triggerScan()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition shrink-0">
-        Scan
+      <div class="h-6 w-px bg-zinc-800"></div>
+      <button id="modeToggleBtn" onclick="toggleInteractionMode()" class="px-5 py-2.5 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 rounded-lg text-sm font-black transition flex items-center gap-2 shrink-0">
+        <span id="modeIcon">☑</span> <span id="modeLabel">Multi-Select: Off</span>
       </button>
-
-      <button onclick="openCompareTab()" class="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 rounded text-xs font-bold transition shrink-0" title="Open Dual Compare">
-        ⚖ Compare
+      <button onclick="selectVisible()" class="px-4 py-2.5 bg-blue-950 hover:bg-blue-900 border border-blue-700 text-blue-200 font-black rounded-lg text-sm transition shrink-0">Select All</button>
+      <button onclick="clearSelection()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold rounded-lg text-sm transition shrink-0">Clear</button>
+      <div class="h-6 w-px bg-zinc-800"></div>
+      <button onclick="openMoveModal()" class="px-4 py-2.5 bg-orange-950 hover:bg-orange-900 border border-orange-700 text-orange-200 font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0">📦 Move</button>
+      <button onclick="quickMoveToJunk()" class="px-4 py-2.5 bg-amber-950 hover:bg-amber-900 border border-amber-700 text-amber-200 font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0">🗑 Move to Junk</button>
+      <button onclick="openJunkBin()" class="px-4 py-2.5 bg-fuchsia-950 hover:bg-fuchsia-900 border border-fuchsia-700 text-fuchsia-200 hover:text-white font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0" title="View files inside .junk">🗑 Junk Bin</button>
+      <div class="h-6 w-px bg-zinc-800"></div>
+      <button id="hubBtnSlideshow" onclick="toggleMenuDrawer('slideshow')" class="px-4 py-2.5 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0">
+        <span class="text-emerald-400">▶</span>
+        <span>Slideshow</span>
+        <span id="deckCountBadge" class="bg-black/50 border border-emerald-700 text-emerald-300 px-1.5 py-0.5 rounded font-mono text-xs font-bold">0</span>
       </button>
+      <div class="relative dropdown z-50 shrink-0">
+        <button id="viewingCountBtn" class="px-4 py-2.5 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700 text-cyan-200 rounded-lg text-sm font-black flex items-center gap-1.5 transition">
+          <span>🔍</span>
+          <span id="viewingLabel">Viewing (100)</span>
+          <span class="text-[10px] text-cyan-400">▼</span>
+        </button>
+        <div class="dropdown-menu absolute left-0 top-full mt-1.5 hidden w-64 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-3 z-50 space-y-3">
+          <div>
+            <label class="text-xs font-black text-zinc-400 uppercase tracking-wider">Sort By:</label>
+            <select id="sortSelect" onchange="changeSortMode(this.value)" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg text-xs px-2.5 py-2 text-zinc-200 focus:outline-none font-bold mt-1.5 mb-3">
+              <option value="name_asc" selected>Filename (A-Z)</option>
+              <option value="first_tag">First Tag (A-Z)</option>
+              <option value="second_tag">Second Tag (A-Z)</option>
+              <option value="most_tags">Most Tags First</option>
+              <option value="size_desc">File Size (Largest)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-black text-zinc-400 uppercase tracking-wider">Size:</label>
+            <div class="flex items-center border border-zinc-800 rounded-lg overflow-hidden mt-1.5">
+              <button onclick="setDensity('dense')" id="denseBtn" class="px-3 py-2 text-xs bg-zinc-900 text-zinc-300 border-r border-zinc-800 font-bold flex-1">Small</button>
+              <button onclick="setDensity('standard')" id="stdBtn" class="px-3 py-2 text-xs bg-rose-600 text-white border-r border-zinc-800 font-black flex-1">Medium</button>
+              <button onclick="setDensity('large')" id="largeBtn" class="px-3 py-2 text-xs bg-zinc-900 text-zinc-300 font-bold flex-1">Large</button>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs font-black text-zinc-400 uppercase tracking-wider">Grid Count:</label>
+            <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="w-full bg-zinc-900 border border-zinc-800 rounded-lg text-xs px-2.5 py-2 text-zinc-200 focus:outline-none font-bold mt-1.5">
+              <option value="30">30 photos</option>
+              <option value="60">60 photos</option>
+              <option value="100" selected>100 photos</option>
+              <option value="99999">All (Uncapped)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <button id="hubBtnTags" onclick="toggleMenuDrawer('tags')" class="px-4 py-2.5 bg-yellow-950 hover:bg-yellow-900 border border-yellow-700 text-yellow-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0">
+        <span class="text-yellow-400">🏷</span>
+        <span>Tags</span>
+      </button>
+      <button id="geminiDockToggleBtn" onclick="toggleGeminiStudio()" class="px-4 py-2.5 bg-gradient-to-r from-indigo-950 to-sky-950 hover:from-indigo-900 hover:to-sky-900 border border-sky-500/60 text-sky-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 shadow">
+        <span>✨</span>
+        <span>AI Studio</span>
+      </button>
+      <div id="splitDockControls" class="hidden flex items-center gap-2.5 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 shadow shrink-0">
+        <label class="flex items-center gap-1.5 text-xs text-zinc-300 font-bold cursor-pointer select-none">
+          <input id="syncZoomCheck" type="checkbox" class="accent-rose-500 rounded h-3.5 w-3.5">
+          <span>🔗 Sync Tabs</span>
+        </label>
+        <div class="h-4 w-px bg-zinc-800"></div>
+        <button onclick="swapSplitWorkspaces()" class="text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-bold transition">⇄ Swap Sides</button>
+      </div>
     </div>
-
-    <div class="flex items-center gap-2 flex-grow justify-end max-w-2xl">
-      <div class="relative flex-grow max-w-xs flex items-center">
-        <input id="searchInput" type="text" placeholder="Search (+include)..." class="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 pr-6 text-xs text-zinc-100 w-full focus:border-sky-500 focus:outline-none" oninput="applyFilters()" />
-        <button onclick="clearSearch()" class="absolute right-1.5 text-zinc-500 hover:text-zinc-200 text-xs font-bold p-0.5" title="Clear search">✕</button>
+    <div class="flex items-center gap-2 shrink-0">
+      <button id="inlineCompareToggleBtn" onclick="toggleSplitView()" class="px-3.5 py-2.5 bg-violet-950 hover:bg-violet-900 border border-violet-700 text-violet-200 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow shrink-0">⚖ Split View</button>
+      <div class="relative flex items-center w-36">
+        <input id="searchInput" type="text" placeholder="Global search..." class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 pr-7 text-xs text-zinc-100 w-full focus:border-sky-500 focus:outline-none font-semibold" oninput="applyFilters()" />
+        <button onclick="clearSearch()" class="absolute right-2 text-zinc-500 hover:text-zinc-200 text-xs font-bold">✕</button>
       </div>
-
-      <div class="relative flex-grow max-w-xs flex items-center">
-        <input id="excludeInput" type="text" placeholder="Exclude (-negative)..." class="bg-zinc-950 border border-rose-950/60 rounded px-2.5 py-1 pr-6 text-xs text-rose-300 placeholder-zinc-600 w-full focus:border-rose-500 focus:outline-none" oninput="applyFilters()" />
-        <button onclick="clearExclude()" class="absolute right-1.5 text-zinc-500 hover:text-rose-300 text-xs font-bold p-0.5" title="Clear exclude filter">✕</button>
+      <div class="relative flex items-center w-36">
+        <input id="sortTagInput" type="text" placeholder="Sort by Tag..." class="bg-zinc-950 border border-sky-900/80 rounded-lg px-3 py-2 pr-7 text-xs text-sky-200 placeholder-zinc-500 w-full focus:border-sky-400 focus:outline-none font-semibold" oninput="applySortTag(this.value)" />
+        <button onclick="const el=document.getElementById('sortTagInput'); el.value=''; applySortTag('');" class="absolute right-2 text-zinc-500 hover:text-sky-300 text-xs font-bold">✕</button>
       </div>
-
-      <button id="untaggedToggleBtn" onclick="toggleUntaggedOnly()" class="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded text-xs font-semibold transition shrink-0">
-        ★ Untagged
-      </button>
-
-      <button onclick="exitApp()" class="px-2 py-1 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-xs font-bold transition shrink-0" title="Quit Server">
-        ✕
-      </button>
+      <div class="relative flex items-center w-36">
+        <input id="excludeInput" type="text" placeholder="Exclude (-)..." class="bg-zinc-950 border border-rose-950/80 rounded-lg px-3 py-2 pr-7 text-xs text-rose-300 placeholder-zinc-600 w-full focus:border-rose-500 focus:outline-none font-semibold" oninput="applyFilters()" />
+        <button onclick="clearExclude()" class="absolute right-2 text-zinc-500 hover:text-rose-300 text-xs font-bold">✕</button>
+      </div>
+      <button id="untaggedToggleBtn" onclick="toggleUntaggedOnly()" class="px-3.5 py-2 bg-lime-950 hover:bg-lime-900 text-lime-200 border border-lime-700 rounded-lg text-xs font-black transition shrink-0">★ Untagged</button>
+      <button onclick="launchNewSession()" class="px-3.5 py-2 bg-sky-950 hover:bg-sky-900 text-sky-200 border border-sky-700 rounded-lg text-xs font-black transition shrink-0">+ New Tab</button>
+      <button onclick="exitApp()" class="px-3.5 py-2 bg-red-950 hover:bg-red-900 text-red-200 border border-red-700 rounded-lg text-xs font-black transition shrink-0">✕</button>
     </div>
   </header>
 
-  <!-- ROW 2: Breadcrumbs & Quick Hops -->
-  <section class="bg-zinc-950 border-b border-zinc-900 px-3 py-1 flex flex-wrap items-center gap-1.5 text-xs">
-    <div id="breadcrumbBar" class="flex items-center gap-1 font-mono text-zinc-400 overflow-x-auto text-[11px]">
-      <span class="text-zinc-600">Path:</span>
-      <span class="text-zinc-500 italic">No folder loaded</span>
+  <!-- DOCKED SUB-DRAWERS -->
+  <div id="drawerSlideshow" class="hidden px-5 py-3 bg-zinc-950 border-b border-zinc-800 flex items-center justify-center gap-4 z-30 shrink-0">
+    <button onclick="startDeckSlideshow()" class="px-5 py-2.5 bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 font-black rounded-lg text-sm transition flex items-center gap-2 shadow">▶ Play Slideshow</button>
+    <div class="h-5 w-px bg-zinc-800"></div>
+    <button onclick="addToDeckFromSelection()" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-sky-300 font-bold rounded-lg text-sm transition">+ Add Selected to Playlist</button>
+    <button onclick="openDeckModal()" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-bold rounded-lg text-sm transition">🔍 See Playlist</button>
+    <div class="h-5 w-px bg-zinc-800"></div>
+    <button onclick="clearDeck(); renderDeckGrid();" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-rose-400 font-bold rounded-lg text-sm transition">✕ Clear Playlist</button>
+    <button onclick="closeAllDrawers()" class="ml-4 text-zinc-500 hover:text-zinc-200 text-xs font-bold">✕ Close</button>
+  </div>
+
+  <div id="drawerTags" class="hidden px-5 py-3 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between gap-4 z-30 shrink-0">
+    <div class="flex items-center gap-3 min-w-0 flex-grow">
+      <div class="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg p-1.5 shrink-0">
+        <select id="presetSelect" onchange="handlePresetChange(this.value)" class="bg-transparent text-zinc-100 text-xs font-bold px-2 py-1 focus:outline-none cursor-pointer border-0"></select>
+        <button onclick="openPresetModal()" class="text-zinc-400 hover:text-white text-xs px-1.5" title="Edit palettes">⚙</button>
+      </div>
+      <div id="palettePills" class="flex items-center gap-2 overflow-x-auto py-1 flex-grow"></div>
     </div>
-    <div class="h-3 w-px bg-zinc-800 mx-1"></div>
-    <div id="subfolderBar" class="flex items-center gap-1.5 overflow-x-auto"></div>
-  </section>
-
-  <!-- ROW 3: Toolbar with Prominent Selection Controls -->
-  <section class="sticky top-[45px] z-30 bg-black/90 border-b border-zinc-800 px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 backdrop-blur">
-    
-    <!-- Mode & Selection Station -->
-    <div class="flex items-center gap-2 shrink-0 bg-zinc-950 border border-zinc-800 rounded p-1">
-      <button id="modeToggleBtn" onclick="toggleInteractionMode()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded text-xs font-bold border border-zinc-700 flex items-center gap-1 transition">
-        <span id="modeIcon">🖼</span> <span id="modeLabel">View Mode</span>
-      </button>
-
-      <div class="h-4 w-px bg-zinc-800"></div>
-
-      <!-- Bigger Selection Buttons -->
-      <span id="selectionCount" class="text-xs font-mono text-zinc-400 px-1 font-semibold">0 sel</span>
-      <button onclick="selectVisible()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-sky-400 hover:text-sky-300 rounded text-xs font-bold transition">
-        Select All
-      </button>
-      <button onclick="clearSelection()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white rounded text-xs font-semibold transition">
-        Clear
-      </button>
-
-      <div class="h-4 w-px bg-zinc-800"></div>
-
-      <!-- Persistent Deck Actions -->
-      <button onclick="addToDeckFromSelection()" class="px-2.5 py-1 bg-sky-900/80 hover:bg-sky-800 border border-sky-700 text-sky-200 rounded text-xs font-bold transition" title="Add selected to persistent Deck">
-        + Deck
-      </button>
-      <button onclick="openDeckModal()" class="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 rounded text-xs font-mono transition">
-        Deck: <span id="deckCountBadge" class="font-bold text-sky-400">0</span>
-      </button>
-      <button onclick="startDeckSlideshow()" class="px-3 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 rounded text-xs font-bold transition">
-        ▶ Play
-      </button>
+    <div class="flex items-center gap-2 shrink-0">
+      <input id="customTagInput" type="text" placeholder="+ Tag..." class="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 w-32 focus:w-48 transition-all focus:border-sky-500 focus:outline-none font-semibold" onkeydown="if(event.key==='Enter') applyCustomTagInput()" />
+      <button onclick="applyCustomTagInput()" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition shadow">Add</button>
+      <button onclick="applyCustomTagRemoval()" class="px-4 py-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 rounded-lg text-xs font-bold transition">Remove Tag</button>
+      <button onclick="closeAllDrawers()" class="text-zinc-500 hover:text-zinc-200 text-xs font-bold ml-2">✕ Close</button>
     </div>
+  </div>
 
-    <!-- Viewport & Pagination -->
-    <div class="flex items-center gap-1.5 shrink-0 bg-zinc-950 border border-zinc-800 rounded p-1">
-      <div class="flex items-center border border-zinc-800 rounded overflow-hidden">
-        <button onclick="setDensity('dense')" id="denseBtn" class="px-1.5 py-0.5 text-[10px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-r border-zinc-800">S</button>
-        <button onclick="setDensity('standard')" id="stdBtn" class="px-1.5 py-0.5 text-[10px] bg-sky-700 text-white border-r border-zinc-800">M</button>
-        <button onclick="setDensity('large')" id="largeBtn" class="px-1.5 py-0.5 text-[10px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300">L</button>
+  <!-- WORKSPACE STAGE (50/50 SPLIT WITH LIVE LEFT WORKSPACE & RIGHT GEMINI STUDIO) -->
+  <main id="mainWorkspaceStage" class="flex-grow grid grid-cols-1 divide-x divide-zinc-800 overflow-hidden relative">
+    <div id="primaryWorkspaceMount" class="h-full w-full overflow-hidden flex flex-col"></div>
+    <div id="secondaryWorkspaceMount" class="hidden h-full w-full overflow-hidden flex flex-col"></div>
+
+    <!-- DOCKED RIGHT-PANE GEMINI STUDIO -->
+    <div id="geminiStudioMount" class="hidden h-full w-full overflow-hidden flex flex-col bg-zinc-950">
+      
+      <!-- Studio Top Status Header -->
+      <div class="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <span class="text-lg">✨</span>
+          <h2 class="font-black text-sm tracking-wide text-zinc-100 uppercase">Gemini Studio</h2>
+          <select id="geminiModelSelect" class="bg-zinc-900 border border-zinc-700 text-sky-300 text-xs font-bold rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer shadow-sm">
+            <option value="gemini-3.1-flash-image" selected>Gemini 3.1 Flash Image (Gen & Edits)</option>
+            <option value="gemini-3-pro-image">Gemini 3 Pro Image (High Quality)</option>
+            <option value="gemini-3-flash-preview">Gemini 3 Flash (Tags & Critique)</option>
+          </select>
+          <button id="geminiKeyStatusBtn" onclick="promptForApiKey()" class="text-xs font-bold px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 shadow-sm"></button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="toggleSessionHistoryView()" class="px-3.5 py-1.5 text-xs font-black rounded-lg shadow transition bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5">
+            🕒 History (<span id="historyCountBadge">0</span>)
+          </button>
+          <button onclick="closeGeminiModal()" class="px-3 py-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 font-black rounded-lg text-xs transition shadow">✕ Close</button>
+        </div>
       </div>
 
-      <select id="pageSizeSelect" onchange="changePageSize(this.value)" class="bg-zinc-900 border border-zinc-800 rounded text-[10px] px-1 py-0.5 text-zinc-300 focus:outline-none">
-        <option value="30">30</option>
-        <option value="60">60</option>
-        <option value="100" selected>100</option>
-        <option value="99999">All</option>
-      </select>
-
-      <div class="flex items-center gap-1">
-        <button onclick="changePage(-1)" class="topPrevBtn px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-[10px] text-zinc-300 disabled:opacity-30">‹</button>
-        <span class="topPageIndicator font-mono text-[10px] text-zinc-400">1/1</span>
-        <button onclick="changePage(1)" class="topNextBtn px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-[10px] text-zinc-300 disabled:opacity-30">›</button>
-      </div>
-    </div>
-
-    <!-- Palette Presets & Tag Station -->
-    <div class="flex items-center gap-1.5 flex-grow justify-end min-w-0">
-      <div class="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded p-1 shrink-0">
-        <select id="presetSelect" onchange="handlePresetChange(this.value)" class="bg-transparent text-xs text-zinc-200 font-semibold focus:outline-none cursor-pointer"></select>
-        <button onclick="openPresetModal()" class="text-zinc-400 hover:text-zinc-200 text-xs px-1" title="Edit palettes">⚙</button>
+      <!-- Active Reference Strip (Supports 1 or Multiple Selected Photos from Left Pane) -->
+      <div class="px-4 py-2 bg-zinc-900/70 border-b border-zinc-800 flex items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-2 min-w-0 overflow-x-auto py-0.5">
+          <span class="text-[11px] font-black uppercase tracking-wider text-sky-400 shrink-0">Reference(s):</span>
+          <div id="geminiRefStrip" class="flex items-center gap-2 overflow-x-auto"></div>
+        </div>
+        <span class="text-[11px] font-mono text-zinc-400 shrink-0 hidden xl:inline">Select multiple on left for group/couple shots</span>
       </div>
 
-      <div id="palettePills" class="flex items-center gap-1 overflow-x-auto py-0.5"></div>
-
-      <div class="flex items-center gap-1 shrink-0">
-        <input id="customTagInput" type="text" placeholder="+ Tag..." class="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 w-24 focus:w-36 transition-all focus:border-sky-500 focus:outline-none" onkeydown="if(event.key==='Enter') applyCustomTagInput()" />
-        <button onclick="applyCustomTagInput()" class="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition">Add</button>
+      <!-- Color-Coded Style Rack -->
+      <div class="px-3 py-2.5 bg-zinc-950 border-b border-zinc-800 flex items-center gap-2 overflow-x-auto shrink-0 shadow-md">
+        <button type="button" onclick="appendGeminiModifier('Salon')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-violet-950 hover:bg-violet-900 border border-violet-700 text-violet-200">Salon</button>
+        <button type="button" onclick="appendGeminiModifier('Light Beams')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-yellow-950 hover:bg-yellow-900 border border-yellow-600 text-yellow-200">Light Beams</button>
+        <button type="button" onclick="appendGeminiModifier('Steampunk')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-amber-950 hover:bg-amber-900 border border-amber-700 text-amber-200">Steampunk</button>
+        <button type="button" onclick="appendGeminiModifier('Technicolour')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-fuchsia-950 hover:bg-fuchsia-900 border border-fuchsia-700 text-fuchsia-200">Technicolour</button>
+        <button type="button" onclick="appendGeminiModifier('Sketch')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-zinc-900 hover:bg-zinc-800 border border-zinc-600 text-zinc-200">Sketch</button>
+        <button type="button" onclick="appendGeminiModifier('Dynamite')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-red-950 hover:bg-red-900 border border-red-700 text-red-200">Dynamite</button>
+        <button type="button" onclick="appendGeminiModifier('Colour Block')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700 text-cyan-200">Colour Block</button>
+        <button type="button" onclick="appendGeminiModifier('Cyborg')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-teal-950 hover:bg-teal-900 border border-teal-700 text-teal-200">Cyborg</button>
+        <button type="button" onclick="appendGeminiModifier('Cinematic')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-sky-950 hover:bg-sky-900 border border-sky-700 text-sky-200">Cinematic</button>
+        <button type="button" onclick="appendGeminiModifier('Moody')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200">Moody</button>
+        <button type="button" onclick="appendGeminiModifier('Runway')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-rose-950 hover:bg-rose-900 border border-rose-700 text-rose-200">Runway</button>
+        <button type="button" onclick="appendGeminiModifier('Oil Painting')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-orange-950 hover:bg-orange-900 border border-orange-700 text-orange-200">Oil Painting</button>
+        <div class="h-6 w-px bg-zinc-800 mx-1 shrink-0"></div>
+        <button type="button" onclick="triggerGeminiQuickPrompt('Suggest 6 relevant, lowercase, single-word tags separated by commas for this photo.')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-emerald-950 hover:bg-emerald-900 border border-emerald-600 text-emerald-200">🏷 Suggest Tags</button>
+        <button type="button" onclick="triggerGeminiQuickPrompt('Change the primary accent color in this image to a vibrant cinematic hue while keeping the rest natural.')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-purple-950 hover:bg-purple-900 border border-purple-600 text-purple-200">🎨 Change Color</button>
+        <button type="button" onclick="triggerGeminiQuickPrompt('Combine the subjects from these reference photos into a natural, cohesive couple/group portrait with matching studio lighting.')" class="px-3.5 py-2 text-xs font-black rounded-xl shadow transition transform active:scale-95 shrink-0 bg-pink-950 hover:bg-pink-900 border border-pink-600 text-pink-200">👥 Combine Subjects</button>
       </div>
-    </div>
-  </section>
 
-  <!-- MAIN PHOTO GRID AREA -->
-  <main id="mainGridArea" class="flex-grow p-3 bg-black">
-    <div id="imageGrid" class="grid grid-standard gap-2.5"></div>
-    <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 text-zinc-600">
-      <div class="text-4xl mb-2">📁</div>
-      <p class="text-sm">No images match your active view.</p>
+      <!-- Right Stage Body: Active Output OR Session History Reel -->
+      <div class="flex-grow relative overflow-hidden flex flex-col bg-black">
+        <div id="geminiActiveStage" class="flex-grow flex flex-col h-full overflow-hidden w-full absolute inset-0 z-10">
+          <div id="geminiActiveStream" class="flex-grow flex flex-col items-center justify-center overflow-auto p-4 relative"></div>
+        </div>
+        <div id="geminiHistoryStage" class="hidden flex-grow h-full w-full absolute inset-0 z-20 bg-zinc-950 overflow-y-auto p-5 space-y-5"></div>
+      </div>
+
+      <!-- Bottom Command Dock -->
+      <div class="px-4 py-3 bg-zinc-950 border-t border-zinc-800 flex items-center gap-3 shrink-0 z-30">
+        <select id="geminiAspectSelect" class="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs font-black rounded-xl px-3 py-3 focus:outline-none focus:border-sky-500 cursor-pointer">
+          <option value="1:1">1:1 Square</option>
+          <option value="16:9">16:9 Wide</option>
+          <option value="4:5">4:5 Portrait</option>
+          <option value="9:16">9:16 Vertical</option>
+        </select>
+        <form id="geminiForm" onsubmit="handleGeminiSubmit(event)" class="flex-grow flex items-center gap-2.5">
+          <input id="geminiInput" type="text" placeholder="Describe edit, combine selected photos, or ask for tags... (Enter)" class="flex-grow bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-sky-500 font-bold" />
+          <button id="geminiSubmitBtn" type="submit" class="px-6 py-3 bg-rose-600 hover:bg-rose-500 disabled:bg-rose-950 text-white font-black text-sm rounded-xl transition shadow-lg flex items-center gap-2 shrink-0">
+            <span>⮞</span> <span>Send</span>
+          </button>
+        </form>
+      </div>
+
     </div>
   </main>
 
-  <!-- FOOTER PAGINATION -->
-  <footer class="sticky bottom-0 z-30 bg-black/95 border-t border-zinc-900 px-4 py-2 flex items-center justify-between text-xs text-zinc-400 backdrop-blur">
-    <div id="statusBar">Loaded 0 items</div>
-    <div class="flex items-center gap-2">
-      <button onclick="changePage(-1)" id="prevPageBtn" class="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-xs disabled:opacity-30">Prev</button>
-      <span id="pageIndicator" class="font-mono text-zinc-300">Page 1 / 1</span>
-      <button onclick="changePage(1)" id="nextPageBtn" class="px-2.5 py-1 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 rounded text-xs disabled:opacity-30">Next</button>
-    </div>
-  </footer>
-
-  <!-- FULLSCREEN LIGHTBOX -->
-  <div id="lightbox" class="fixed inset-0 z-50 bg-black hidden flex flex-col">
-    <div class="flex items-center justify-between px-4 py-2.5 bg-zinc-950 border-b border-zinc-800">
-      <div class="flex items-center gap-3">
-        <span id="lbCounter" class="text-xs font-mono text-zinc-400">1 / 1</span>
-        <span id="lbFilename" class="text-xs font-mono text-zinc-200 font-bold truncate max-w-sm"></span>
-        
-        <div id="deckSlideshowControls" class="flex items-center gap-2 ml-2 pl-2 border-l border-zinc-800">
-          <button id="lbSlideshowToggle" onclick="toggleSlideshowPlayback()" class="px-2.5 py-0.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-xs rounded font-bold">⏸ Pause</button>
+  <!-- DEDICATED FULLSCREEN SLIDESHOW PLAYER MODAL -->
+  <div id="slideshowModal" class="fixed inset-0 z-50 bg-black hidden flex flex-col">
+    <div class="flex items-center justify-between px-6 py-2.5 bg-zinc-950 border-b border-zinc-800 shrink-0">
+      <div class="flex items-center gap-4">
+        <span id="ssCounter" class="text-sm font-mono text-zinc-400 font-bold">1 / 1</span>
+        <span id="ssFilename" class="text-sm font-mono text-zinc-100 font-bold truncate max-w-md"></span>
+        <div class="flex items-center gap-2.5 ml-3 pl-3 border-l border-zinc-800">
+          <button id="ssToggleBtn" onclick="toggleSlideshowPlayback()" class="px-3.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-xs rounded font-bold">⏸ Pause</button>
           
-          <div class="flex items-center border border-zinc-800 rounded overflow-hidden text-[11px] font-mono">
-            <button onclick="setSlideshowSpeed(1000)" data-speed="1000" class="speedBtn px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-r border-zinc-800">1s</button>
-            <button onclick="setSlideshowSpeed(3500)" data-speed="3500" class="speedBtn px-1.5 py-0.5 bg-sky-600 text-white font-bold border-r border-zinc-800">3s</button>
-            <button onclick="setSlideshowSpeed(5000)" data-speed="5000" class="speedBtn px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-r border-zinc-800">5s</button>
-            <button onclick="setSlideshowSpeed(15000)" data-speed="15000" class="speedBtn px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border-r border-zinc-800">15s</button>
-            <button onclick="setSlideshowSpeed(30000)" data-speed="30000" class="speedBtn px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400">30s</button>
+          <!-- Photo Transition Speeds -->
+          <div id="ssPhotoSpeedGroup" class="flex items-center border border-zinc-800 rounded overflow-hidden text-xs font-mono font-bold" title="Photo Transition Speed">
+            <button onclick="setSlideshowSpeed(1000)" data-speed="1000" class="speedBtn px-2 py-1 bg-zinc-900 text-zinc-400 border-r border-zinc-800">1s</button>
+            <button onclick="setSlideshowSpeed(3500)" data-speed="3500" class="speedBtn px-2 py-1 bg-sky-600 text-white border-r border-zinc-800">3s</button>
+            <button onclick="setSlideshowSpeed(5000)" data-speed="5000" class="speedBtn px-2 py-1 bg-zinc-900 text-zinc-400 border-r border-zinc-800">5s</button>
+            <button onclick="setSlideshowSpeed(15000)" data-speed="15000" class="speedBtn px-2 py-1 bg-zinc-900 text-zinc-400 border-r border-zinc-800">15s</button>
           </div>
 
-          <button id="shuffleToggleBtn" onclick="toggleShuffle()" class="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 rounded text-xs font-semibold" title="Toggle Random Shuffle">
-            🔀 Shuffle
-          </button>
+          <!-- Video Playback Speeds -->
+          <div id="ssVideoSpeedGroup" class="hidden flex items-center border border-zinc-800 rounded overflow-hidden text-xs font-mono font-bold" title="Video Playback Speed">
+            <button onclick="setSlideshowVideoSpeed(0.5)" data-rate="0.5" class="ssVidRateBtn px-2.5 py-1 bg-zinc-900 text-zinc-400 border-r border-zinc-800">0.5x</button>
+            <button onclick="setSlideshowVideoSpeed(1.0)" data-rate="1" class="ssVidRateBtn px-2.5 py-1 bg-rose-600 text-white border-r border-zinc-800">1x</button>
+            <button onclick="setSlideshowVideoSpeed(1.5)" data-rate="1.5" class="ssVidRateBtn px-2.5 py-1 bg-zinc-900 text-zinc-400">1.5x</button>
+          </div>
 
-          <button onclick="evictCurrentSlideFromDeck()" class="px-2 py-0.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-xs" title="Evict slide from Deck (Del)">
-            🗑 Evict
-          </button>
+          <button id="shuffleToggleBtn" onclick="toggleShuffle()" class="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 rounded text-xs font-bold">🔀 Shuffle</button>
         </div>
       </div>
-
-      <div class="flex items-center gap-4">
-        <label class="flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
-          <input type="checkbox" id="lbSelectCheckbox" class="accent-sky-500 rounded" onchange="toggleSelectFromLightbox()">
-          <span>Selected</span>
-        </label>
-        
-        <button onclick="closeLightbox()" class="px-3.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-sm font-black transition flex items-center gap-1 shadow-lg border border-rose-400/30" title="Close Lightbox (Esc)">
-          ✕ Close
-        </button>
-      </div>
+      <button onclick="closeSlideshowModal()" class="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded text-sm font-black transition shadow">✕ Close</button>
     </div>
-    
-    <div id="lbImageContainer" class="flex-grow flex items-center justify-center relative p-3 overflow-hidden bg-black" onclick="handleLightboxClick(event)">
-      <div class="relative max-h-full max-w-full flex items-center justify-center rounded border border-zinc-800 bg-black/60 shadow-2xl overflow-hidden pointer-events-none">
-        <img id="lbImage" class="max-h-[82vh] max-w-[92vw] object-contain transition-transform duration-75 select-none pointer-events-auto" src="" />
-      </div>
-      
-      <button onclick="navigateLightbox(-1)" class="absolute left-4 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-zinc-900 text-white px-3.5 py-6 rounded-lg text-2xl border border-zinc-800 z-10 transition">‹</button>
-      <button onclick="navigateLightbox(1)" class="absolute right-4 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-zinc-900 text-white px-3.5 py-6 rounded-lg text-2xl border border-zinc-800 z-10 transition">›</button>
+    <div id="ssImageContainer" class="flex-grow flex items-center justify-center relative p-2 overflow-hidden bg-black" onclick="handleSlideshowClick(event)">
+      <img id="ssImage" class="max-h-[90vh] max-w-[96vw] object-contain select-none transition-transform duration-75" src="" />
+      <video id="ssVideo" class="hidden max-h-[88vh] max-w-[96vw] object-contain select-none" autoplay playsinline></video>
+      <button onclick="event.stopPropagation(); navigateSlideshow(-1)" class="absolute left-6 top-1/2 -translate-y-1/2 bg-black/75 hover:bg-zinc-900 text-white px-4 py-8 rounded-lg text-3xl border border-zinc-800 z-10 transition">‹</button>
+      <button onclick="event.stopPropagation(); navigateSlideshow(1)" class="absolute right-6 top-1/2 -translate-y-1/2 bg-black/75 hover:bg-zinc-900 text-white px-4 py-8 rounded-lg text-3xl border border-zinc-800 z-10 transition">›</button>
     </div>
-
-    <div class="p-3 bg-zinc-950/95 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2">
-      <div id="lbTags" class="flex flex-wrap gap-1.5"></div>
-      <div class="flex items-center gap-1">
-        <input id="lbAddTagInput" type="text" placeholder="+ Tag..." class="bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs text-zinc-100 focus:outline-none" onkeydown="if(event.key==='Enter') addLightboxTag()" />
-        <button onclick="addLightboxTag()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold">Add</button>
-      </div>
+    <!-- Bottom Video Progress Bar in Slideshow -->
+    <div id="ssVideoProgressBar" class="hidden px-8 py-3 bg-zinc-950 border-t border-zinc-800 flex items-center gap-4 shrink-0 z-20">
+      <span id="ssVideoTime" class="font-mono text-xs text-zinc-300 font-bold shrink-0">0:00 / 0:00</span>
+      <input id="ssVideoSeek" type="range" min="0" max="100" value="0" step="0.1" class="flex-grow h-2.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-sky-500" />
     </div>
   </div>
 
-  <!-- THE DECK MANAGER MODAL -->
-  <div id="deckModal" class="fixed inset-0 z-50 bg-black/85 hidden flex items-center justify-center p-4">
-    <div class="bg-zinc-900 border border-zinc-700 rounded-lg max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-      <div class="flex justify-between items-center px-4 py-3 border-b border-zinc-800 bg-zinc-950">
+  <!-- PLAYLIST MANAGER MODAL -->
+  <div id="deckModal" class="fixed inset-0 z-50 bg-black/85 hidden flex items-center justify-center p-6">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="flex justify-between items-center px-6 py-4 border-b border-zinc-800 bg-zinc-950">
+        <div class="flex items-center gap-4">
+          <h3 class="font-bold text-base text-zinc-100 uppercase tracking-wider">Slideshow Playlist</h3>
+          <span id="deckModalCount" class="text-sm font-mono text-zinc-400 font-bold">0 items</span>
+        </div>
         <div class="flex items-center gap-3">
-          <h3 class="font-bold text-sm text-zinc-100 uppercase tracking-wider">Sequence Deck</h3>
-          <span id="deckModalCount" class="text-xs font-mono text-zinc-400">0 items</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button onclick="playDeckFromModal()" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition flex items-center gap-1">
-            ▶ Play Deck
-          </button>
-          <button onclick="clearDeck(); renderDeckGrid();" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-rose-300 rounded text-xs transition">
-            Clear Deck
-          </button>
-          <button onclick="closeDeckModal()" class="text-zinc-400 hover:text-white px-2 text-base">✕</button>
+          <button onclick="playDeckFromModal()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-black transition flex items-center gap-1.5 shadow">▶ Play Playlist</button>
+          <button onclick="clearDeck(); renderDeckGrid();" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-rose-300 rounded-lg text-sm font-bold transition">Clear Playlist</button>
+          <button onclick="closeDeckModal()" class="text-zinc-400 hover:text-white px-2 text-xl font-bold">✕</button>
         </div>
       </div>
-      <div id="deckGridContainer" class="flex-grow p-4 overflow-y-auto grid grid-cols-4 sm:grid-cols-6 gap-2.5 bg-black"></div>
+      <div id="deckGridContainer" class="flex-grow p-6 overflow-y-auto grid grid-cols-4 sm:grid-cols-6 gap-3 bg-black"></div>
     </div>
   </div>
 
-  <!-- PRESET MANAGER MODAL -->
-  <div id="presetModal" class="fixed inset-0 z-50 bg-black/80 hidden flex items-center justify-center p-4">
-    <div class="bg-zinc-900 border border-zinc-700 rounded-lg max-w-md w-full p-4 shadow-2xl space-y-4">
-      <div class="flex justify-between items-center border-b border-zinc-800 pb-2">
-        <h3 class="font-bold text-sm text-zinc-100">Manage Tag Palettes</h3>
-        <button onclick="closePresetModal()" class="text-zinc-400 hover:text-white">✕</button>
+  <!-- RELOCATE & SWEEP MODAL -->
+  <div id="moveModal" class="fixed inset-0 z-50 bg-black/85 hidden flex items-center justify-center p-6">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+        <h3 class="font-bold text-base text-zinc-100 uppercase tracking-wider">Relocate Photos</h3>
+        <button onclick="closeMoveModal()" class="text-zinc-400 hover:text-white text-lg font-bold">✕</button>
       </div>
       <div>
-        <label class="text-xs text-zinc-400">Current Palette</label>
-        <select id="modalPresetSelect" onchange="renderPresetModalTags()" class="w-full bg-zinc-950 border border-zinc-800 rounded p-1.5 text-xs text-zinc-200 mt-1"></select>
+        <label class="text-xs text-zinc-400 font-bold block mb-2 uppercase tracking-wide">Pick Existing Subfolder:</label>
+        <div id="moveExistingFolders" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto mb-3"></div>
+        <button onclick="quickMoveToJunk()" class="w-full py-3 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-200 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2">🗑 Move to Junk Folder</button>
       </div>
-      <div>
-        <label class="text-xs text-zinc-400">Tags in this Palette</label>
-        <div id="modalTagList" class="flex flex-wrap gap-1.5 p-2 bg-zinc-950 border border-zinc-800 rounded min-h-[60px] mt-1"></div>
+      <div class="border-t border-zinc-800 pt-4">
+        <label class="text-xs text-zinc-400 font-bold block mb-1 uppercase tracking-wide">Or Type New Target Path:</label>
+        <div class="flex items-center gap-2 mt-1">
+          <input id="moveDestInput" type="text" placeholder="e.g. selects or D:/Archive/2026..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 font-mono focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter') executeSelectedMove()" />
+          <button onclick="browseExternalDestination()" class="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 rounded-lg text-xs font-bold shrink-0 transition">📂 Browse...</button>
+        </div>
       </div>
-      <div class="flex gap-2">
-        <input id="modalNewTagInput" type="text" placeholder="Add tag to palette..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-100 focus:outline-none" onkeydown="if(event.key==='Enter') addTagToCurrentPreset()" />
-        <button onclick="addTagToCurrentPreset()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 rounded text-xs font-bold text-white">Add</button>
-      </div>
-      <div class="border-t border-zinc-800 pt-3 flex justify-between">
-        <button onclick="createNewPresetPrompt()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-xs text-zinc-300">+ New Palette</button>
-        <button onclick="deleteCurrentPreset()" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-800 rounded text-xs text-rose-300">Delete Palette</button>
+      <div class="flex gap-3 pt-3 border-t border-zinc-800">
+        <button onclick="executeSelectedMove()" class="flex-grow px-5 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-lg text-sm transition">Move Selected</button>
+        <button onclick="executeTagSweep()" class="px-5 py-3 bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold border border-amber-900 rounded-lg text-sm transition">Sweep by Tag</button>
       </div>
     </div>
   </div>
 
-  <div id="toast" class="fixed bottom-12 right-4 z-50 bg-zinc-900 border border-zinc-700 text-zinc-200 px-3 py-2 rounded text-xs shadow-xl hidden"></div>
+  <!-- PALETTE PRESET MODAL -->
+  <div id="presetModal" class="fixed inset-0 z-50 bg-black/80 hidden flex items-center justify-center p-6">
+    <div class="bg-zinc-900 border border-zinc-700 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+        <h3 class="font-bold text-base text-zinc-100">Manage Palettes</h3>
+        <button onclick="closePresetModal()" class="text-zinc-400 hover:text-white text-lg font-bold">✕</button>
+      </div>
+      <div>
+        <label class="text-xs text-zinc-400 font-bold">Active Palette</label>
+        <select id="modalPresetSelect" onchange="renderPresetModalTags()" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 mt-1 font-semibold"></select>
+      </div>
+      <div class="flex items-center gap-2 bg-zinc-950/80 p-2 border border-zinc-800 rounded-lg">
+        <input id="renamePaletteInput" type="text" placeholder="New name..." class="flex-grow bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-xs text-zinc-100 focus:outline-none font-semibold" />
+        <button onclick="renameCurrentPalette()" class="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-sky-400 text-xs font-bold rounded-md border border-zinc-700">Save</button>
+      </div>
+      <div>
+        <label class="text-xs text-zinc-400 font-bold">Tags</label>
+        <div id="modalTagList" class="flex flex-wrap gap-2 p-3 bg-zinc-950 border border-zinc-800 rounded-lg min-h-[70px] mt-1"></div>
+      </div>
+      <div class="flex gap-2 pt-1">
+        <input id="modalNewTagInput" type="text" placeholder="Add tag..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none" onkeydown="if(event.key==='Enter') addTagToCurrentPreset()" />
+        <button onclick="addTagToCurrentPreset()" class="px-5 py-2 bg-sky-600 hover:bg-sky-500 rounded-lg text-sm font-bold text-white">Add</button>
+      </div>
+      <div class="border-t border-zinc-800 pt-4 flex justify-between">
+        <button onclick="createNewPresetPrompt()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm text-zinc-300 font-semibold">+ New Palette</button>
+        <button onclick="deleteCurrentPreset()" class="px-4 py-2 bg-rose-950 hover:bg-rose-900 border border-rose-800 rounded-lg text-sm text-rose-300 font-semibold">Delete Palette</button>
+      </div>
+    </div>
+  </div>
 
-  <!-- LOAD ORDER -->
+  <div id="toast" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-zinc-950/95 border-2 border-sky-500/80 text-white px-8 py-4 rounded-xl text-base font-black shadow-2xl backdrop-blur-md pointer-events-none transition-all duration-150 hidden text-center min-w-[280px]"></div>
+
   <script src="/js/panzoom.js"></script>
-  <script src="/js/nav.js"></script>
   <script src="/js/state.js"></script>
   <script src="/js/deck.js"></script>
-  <script src="/js/api.js"></script>
-  <script src="/js/grid.js"></script>
+  <script src="/js/tagdock.js"></script>
   <script src="/js/presets.js"></script>
+  <script src="/js/gemini.js"></script>
+  <script src="/js/template.js"></script>
+  <script src="/js/workspace.js"></script>
   <script src="/js/viewer.js"></script>
   <script src="/js/app.js"></script>
+  <script src="/js/api.js"></script>
 </body>
 </html>

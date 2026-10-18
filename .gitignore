@@ -1,25 +1,19 @@
-# Binaries & executables
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-tagger
+# Local API Key file & environment
+api_key.txt
+.env
 
-# Sidecar metadata / local cache
-catalog.json
-*.log
+# Application Cache & Junk system
 .cache/
+.junk/
+*.tmp
+catalog.json.tmp
 
-# OS specific files
+# OS / Editor Artifacts
 Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
 .DS_Store
-
-# Editor artifacts
 .vscode/
-.idea/
-*.swp
-*~
+
+# Build artifacts
+tagger
+tagger.exe
+audit_dumps/
