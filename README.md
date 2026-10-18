@@ -91,4 +91,11 @@ GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o tagger.exe .
 The -ldflags "-H=windowsgui" flag compiles the binary as a native GUI application so no black terminal window flashes when launched. All HTML, CSS, and JS assets are compiled directly inside the .exe via embed.FS.
 
 📄 License
-MIT License. Free for personal and commercial use.
+Copyright (c) 2026 Phillip Charles. All rights reserved.
+
+This source code and accompanying materials are proprietary and confidential. 
+Unauthorized copying, modification, distribution, sublicensing, reverse engineering, 
+or commercial use of this software, via any medium, is strictly prohibited without 
+the prior express written permission of the copyright holder.
+
+Proprietary / All Rights Reserved. Free for personal evaluation only. Commercial use, distribution, or resale is strictly prohibited.
