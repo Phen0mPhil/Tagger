@@ -28,11 +28,12 @@ let presets = JSON.parse(localStorage.getItem("tag_presets")) || {
 };
 let activePresetKey = Object.keys(presets)[0] || "General";
 
-// Persistent Playlist State
-let deck = JSON.parse(localStorage.getItem("tagger_deck")) || [];
+// Ephemeral Session-Scoped Playlist State
+try { localStorage.removeItem("tagger_deck"); } catch (_) {}
+let deck = JSON.parse(sessionStorage.getItem("tagger_deck")) || [];
 
 function saveDeck() {
-  localStorage.setItem("tagger_deck", JSON.stringify(deck));
+  sessionStorage.setItem("tagger_deck", JSON.stringify(deck));
   updateDeckUI();
 }
 

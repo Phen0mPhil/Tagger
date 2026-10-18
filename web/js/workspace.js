@@ -14,6 +14,7 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
   let localSort = "name_asc";
   let skipInterval = 5;
   let playbackSpeed = 1.0;
+  let scanSeq = 0;
 
   containerEl.innerHTML = getWorkspaceTemplate();
 
@@ -63,6 +64,22 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
   const localSortSelect = root.querySelector(".ws-local-sort");
 
   pzInstance = createPanZoom(viewportEl, inspectedImg);
+
+  function abortPendingGridMedia() {
+    if (!gridEl) return;
+    gridEl.querySelectorAll("img").forEach(img => {
+      img.removeAttribute("src");
+    });
+    gridEl.innerHTML = "";
+  }
+
+  function unloadVideoPlayer() {
+    if (!inspectedVideo) return;
+    inspectedVideo.pause();
+    inspectedVideo.removeAttribute("src");
+    inspectedVideo.load();
+    inspectedVideo.dataset.loadedSrc = "";
+  }
 
   function formatTime(secs) {
     const m = Math.floor(secs / 60) || 0;
@@ -226,10 +243,15 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
 
   async function setDirectory(newDir, preserveState = null) {
     if (!newDir) return;
+    const mySeq = ++scanSeq;
     dir = newDir;
     currentDir = newDir;
     isViewingJunk = newDir.endsWith("/.junk") || newDir.endsWith("\\.junk") || newDir.endsWith(".junk");
     if (restoreJunkBtn) restoreJunkBtn.classList.toggle("hidden", !isViewingJunk);
+
+    // Immediately abort any queued thumbnail/video HTTP requests from the previous view
+    // so Chrome's 6-connection pool is 100% free for /api/scan, /api/browse, and /api/entries
+    abortPendingGridMedia();
 
     try {
       const scanRes = await fetch("/api/scan", {
@@ -237,19 +259,26 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: dir, recursive: document.getElementById("recursiveCheck")?.checked || false })
       });
+      if (mySeq !== scanSeq) return;
       if (!scanRes.ok) {
         if (typeof showToast === "function") showToast("Cannot access folder: " + (await scanRes.text()).substring(0, 50));
         return;
       }
 
+      // Render breadcrumbs BEFORE queuing grid thumbnails so folder navigation is instant
+      await renderBreadcrumbHops(dir);
+      if (mySeq !== scanSeq) return;
+
       const res = await fetch(`/api/entries?dir=${encodeURIComponent(dir)}`);
-      if (!res.ok) return;
+      if (mySeq !== scanSeq || !res.ok) return;
 
       entries = await res.json();
+      if (mySeq !== scanSeq) return;
+
       selected.clear();
+      syncGlobalSelection();
       page = 1;
       applyFilters();
-      await renderBreadcrumbHops(dir);
 
       if (preserveState) {
         currentIndex = Math.min(preserveState.currentIndex, Math.max(0, filtered.length - 1));
@@ -329,7 +358,7 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
   }
 
   function renderGrid() {
-    gridEl.innerHTML = "";
+    abortPendingGridMedia();
     const limit = (typeof pageSize !== "undefined") ? pageSize : 100;
     const isCapped = limit < 99999;
     const totalPages = Math.ceil(filtered.length / limit) || 1;
@@ -362,6 +391,7 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
 
       const img = document.createElement("img");
       img.loading = "lazy";
+      img.decoding = "async";
       img.src = `/api/thumbnail?dir=${encodeURIComponent(dir)}&file=${encodeURIComponent(item.relative_path)}`;
       img.className = "w-full h-full object-cover group-hover:scale-105 transition duration-200";
 
@@ -464,12 +494,8 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
   function closeInspector() {
     isInspectMode = false;
     inspectorEl.classList.add("hidden");
-    inspectedImg.src = "";
-    if (inspectedVideo) {
-      inspectedVideo.pause();
-      inspectedVideo.src = "";
-      inspectedVideo.dataset.loadedSrc = "";
-    }
+    inspectedImg.removeAttribute("src");
+    unloadVideoPlayer();
     videoStage.classList.add("hidden");
     videoControls.classList.add("hidden");
     if (inspectBtn) {
@@ -492,6 +518,7 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
 
     if (isVid) {
       inspectedImg.classList.add("hidden");
+      inspectedImg.removeAttribute("src");
       videoStage.classList.remove("hidden");
       videoControls.classList.remove("hidden");
       
@@ -510,12 +537,11 @@ function createWorkspace({ id, containerEl, onFocusChange }) {
         });
       }
     } else {
-      if (!inspectedVideo.paused) inspectedVideo.pause();
-      inspectedVideo.dataset.loadedSrc = "";
+      unloadVideoPlayer();
       videoStage.classList.add("hidden");
       videoControls.classList.add("hidden");
       inspectedImg.classList.remove("hidden");
-      if (inspectedImg.src !== nextSrc) {
+      if (inspectedImg.getAttribute("src") !== nextSrc) {
         inspectedImg.src = nextSrc;
       }
     }

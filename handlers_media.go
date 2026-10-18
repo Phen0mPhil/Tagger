@@ -3,6 +3,7 @@ package main
 import (
 "crypto/sha256"
 "encoding/hex"
+"fmt"
 "image"
 _ "image/gif"
 "image/jpeg"
@@ -13,12 +14,29 @@ _ "image/png"
 "path/filepath"
 "strings"
 "sync"
+"time"
 
 "golang.org/x/image/draw"
 _ "golang.org/x/image/webp"
 )
 
-var thumbMu sync.Mutex
+var (
+videoThumbSem     = make(chan struct{}, 1)
+failedVideoThumbs sync.Map
+)
+
+const videoFallbackSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+<rect width="100%" height="100%" fill="#09090b"/>
+<circle cx="150" cy="150" r="48" fill="#18181b" stroke="#38bdf8" stroke-width="3"/>
+<polygon points="140,132 172,150 140,168" fill="#38bdf8"/>
+<text x="150" y="225" font-family="monospace" font-size="14" font-weight="bold" fill="#71717a" text-anchor="middle">VIDEO</text>
+</svg>`
+
+func serveVideoFallback(w http.ResponseWriter) {
+w.Header().Set("Content-Type", "image/svg+xml")
+w.Header().Set("Cache-Control", "max-age=60")
+_, _ = w.Write([]byte(videoFallbackSVG))
+}
 
 func handleServeImage(w http.ResponseWriter, r *http.Request) {
 dir := canonicalizePath(r.URL.Query().Get("dir"))
@@ -78,25 +96,50 @@ return
 }
 
 if getMediaType(srcPath) == "video" {
-thumbMu.Lock()
-err := extractVideoThumbnailNative(srcPath, cachedPath)
-thumbMu.Unlock()
+if _, failedBefore := failedVideoThumbs.Load(srcPath); failedBefore {
+serveVideoFallback(w)
+return
+}
 
-if err == nil {
+// Acquire video thumbnail worker with timeout so HTTP connections never hang
+select {
+case videoThumbSem <- struct{}{}:
+case <-r.Context().Done():
+return
+case <-time.After(2500 * time.Millisecond):
+serveVideoFallback(w)
+return
+}
+
+done := make(chan error, 1)
+go func() {
+done <- extractVideoThumbnailNative(srcPath, cachedPath)
+}()
+
+var extractErr error
+select {
+case extractErr = <-done:
+<-videoThumbSem
+case <-time.After(3500 * time.Millisecond):
+// Release semaphore after background call finishes, but don't block the HTTP socket
+go func() {
+<-done
+<-videoThumbSem
+}()
+failedVideoThumbs.Store(srcPath, true)
+serveVideoFallback(w)
+return
+}
+
+if extractErr == nil {
 if info, statErr := os.Stat(cachedPath); statErr == nil && info.Size() > 0 {
 http.ServeFile(w, r, cachedPath)
 return
 }
 }
 
-svg := `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
-<rect width="100%" height="100%" fill="#09090b"/>
-<circle cx="150" cy="150" r="48" fill="#18181b" stroke="#38bdf8" stroke-width="3"/>
-<polygon points="140,132 172,150 140,168" fill="#38bdf8"/>
-<text x="150" y="225" font-family="monospace" font-size="14" font-weight="bold" fill="#71717a" text-anchor="middle">VIDEO</text>
-</svg>`
-w.Header().Set("Content-Type", "image/svg+xml")
-_, _ = w.Write([]byte(svg))
+failedVideoThumbs.Store(srcPath, true)
+serveVideoFallback(w)
 return
 }
 
@@ -120,7 +163,7 @@ return err
 }
 
 resized := downscaleImage(img, 600)
-tmpPath := cachedPath + ".tmp"
+tmpPath := fmt.Sprintf("%s.%d.tmp", cachedPath, time.Now().UnixNano())
 out, err := os.Create(tmpPath)
 if err != nil {
 return err
@@ -132,58 +175,12 @@ _ = os.Remove(tmpPath)
 return err
 }
 _ = out.Close()
-return os.Rename(tmpPath, cachedPath)
+_ = os.Remove(cachedPath)
+if err := os.Rename(tmpPath, cachedPath); err != nil {
+_ = os.Remove(tmpPath)
+return err
 }
-
-func prewarmThumbnails(cat *Catalog) {
-if !cat.prewarming.CompareAndSwap(false, true) {
-return
-}
-defer cat.prewarming.Store(false)
-
-cacheDir := filepath.Join(cat.RootDir, ".cache", "thumbnails")
-_ = os.MkdirAll(cacheDir, 0755)
-
-cat.mu.RLock()
-relPaths := make([]string, 0, len(cat.Entries))
-for rel := range cat.Entries {
-relPaths = append(relPaths, rel)
-}
-cat.mu.RUnlock()
-
-jobs := make(chan string, len(relPaths))
-var wg sync.WaitGroup
-
-for i := 0; i < 4; i++ {
-wg.Add(1)
-go func() {
-defer wg.Done()
-for rel := range jobs {
-hash := sha256.Sum256([]byte(rel))
-thumbName := hex.EncodeToString(hash[:16]) + ".jpg"
-cachedPath := filepath.Join(cacheDir, thumbName)
-
-if info, err := os.Stat(cachedPath); err == nil && info.Size() > 0 {
-continue
-}
-
-srcPath := filepath.Join(cat.RootDir, filepath.FromSlash(rel))
-if getMediaType(srcPath) == "video" {
-thumbMu.Lock()
-_ = extractVideoThumbnailNative(srcPath, cachedPath)
-thumbMu.Unlock()
-} else {
-_ = generateAndCacheImageThumb(srcPath, cachedPath)
-}
-}
-}()
-}
-
-for _, rel := range relPaths {
-jobs <- rel
-}
-close(jobs)
-wg.Wait()
+return nil
 }
 
 func downscaleImage(src image.Image, maxEdge int) image.Image {

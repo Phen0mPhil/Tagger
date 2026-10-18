@@ -108,7 +108,7 @@ function getWorkspaceTemplate() {
               <span class="ws-counter font-mono text-xs text-zinc-400 font-bold shrink-0">0 / 0</span>
               <span class="ws-file-name font-mono text-zinc-200 text-sm font-bold truncate max-w-xs"></span>
               <button class="ws-ai-studio-btn px-4 py-2 bg-gradient-to-r from-indigo-900 to-sky-900 hover:from-indigo-800 hover:to-sky-800 border border-sky-500/50 text-sky-200 font-black rounded-lg text-sm transition flex items-center gap-2 shadow-lg shrink-0" title="Toggle Docked Gemini Studio (Ctrl+G)">
-                <span class="text-base">✨</span> <span>AI Studio</span>
+                <span>Google Gemini</span> <span class="text-base">✨</span>
               </button>
             </div>
             <div class="ws-item-tags flex flex-wrap gap-2 max-w-lg overflow-x-auto"></div>

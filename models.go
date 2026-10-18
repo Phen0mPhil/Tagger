@@ -245,7 +245,7 @@ return nil
 return c.saveToDiskLocked()
 }
 
-func (c *Catalog) MoveEntries(destTarget string, relativePaths []string) (int, string, []string, error) {
+func (c *Catalog) MoveEntries(destTarget string, relativePaths []string) (int, string, []string, bool, map[string]*ImageEntry, error) {
 c.mu.Lock()
 defer c.mu.Unlock()
 
@@ -261,32 +261,38 @@ if destTarget == ".junk" {
 cleanSub = ".junk"
 }
 if cleanSub == "" {
-return 0, "", nil, fmt.Errorf("invalid destination target")
+return 0, "", nil, false, nil, fmt.Errorf("invalid destination target")
 }
-targetDirPath = filepath.Join(c.RootDir, cleanSub)
+targetDirPath = filepath.Join(c.RootDir, filepath.FromSlash(cleanSub))
+}
+
+createdNewDir := false
+if st, err := os.Stat(targetDirPath); os.IsNotExist(err) || (err == nil && !st.IsDir()) {
+createdNewDir = true
 }
 
 if err := os.MkdirAll(targetDirPath, 0755); err != nil {
-return 0, "", nil, fmt.Errorf("failed to create destination: %w", err)
+return 0, "", nil, false, nil, fmt.Errorf("failed to create destination: %w", err)
 }
 
 cacheDir := filepath.Join(c.RootDir, ".cache", "thumbnails")
 movedCount := 0
 movedPaths := make([]string, 0, len(relativePaths))
+movedEntries := make(map[string]*ImageEntry)
 
 for _, rel := range relativePaths {
 cleanRel := filepath.ToSlash(filepath.Clean(rel))
 cleanRel = strings.TrimPrefix(cleanRel, "./")
 
 srcPath := filepath.Join(c.RootDir, filepath.FromSlash(cleanRel))
-_, err := os.Stat(srcPath)
+info, err := os.Stat(srcPath)
 if err != nil {
 found := false
 for k := range c.Entries {
 if strings.EqualFold(k, cleanRel) {
 cleanRel = k
 srcPath = filepath.Join(c.RootDir, filepath.FromSlash(cleanRel))
-_, err = os.Stat(srcPath)
+info, err = os.Stat(srcPath)
 found = (err == nil)
 break
 }
@@ -317,6 +323,13 @@ destFilePath = filepath.Join(targetDirPath, destFileName)
 collisionIdx++
 }
 
+var existingTags []string
+if oldEntry, exists := c.Entries[cleanRel]; exists && oldEntry != nil && len(oldEntry.Tags) > 0 {
+existingTags = append([]string{}, oldEntry.Tags...)
+} else {
+existingTags = []string{}
+}
+
 _ = os.Remove(destFilePath)
 if err := os.Rename(srcPath, destFilePath); err != nil {
 continue
@@ -328,10 +341,16 @@ _ = os.Remove(cachedThumbPath)
 
 delete(c.Entries, cleanRel)
 movedPaths = append(movedPaths, destFileName)
+movedEntries[destFileName] = &ImageEntry{
+RelativePath: destFileName,
+FileName:     destFileName,
+FileSize:     info.Size(),
+Tags:         existingTags,
+}
 movedCount++
 }
 
 resolvedDest := canonicalizePath(targetDirPath)
 _ = c.saveToDiskLocked()
-return movedCount, resolvedDest, movedPaths, nil
+return movedCount, resolvedDest, movedPaths, createdNewDir, movedEntries, nil
 }

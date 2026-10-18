@@ -1,7 +1,9 @@
 let isGeminiStudioOpen = false;
+let wasSplitBeforeGemini = false;
 let lastGeminiTextOutput = "";
 let geminiSessionHistory = []; 
 let isHistoryViewActive = false;
+let pinnedSplitRef = null;
 
 function escapeHtml(str) {
   return String(str || "")
@@ -23,15 +25,14 @@ function base64ToBlobUrl(b64, mimeType) {
   return URL.createObjectURL(blob);
 }
 
-function getActiveGeminiReferences() {
-  const ws = window.primaryWorkspace;
+function extractWorkspaceReferences(ws) {
   if (!ws) return { dir: "", paths: [] };
   const dir = ws.getDirectory();
   if (!dir) return { dir: "", paths: [] };
 
   const selected = ws.getSelected();
   if (selected && selected.length > 0) {
-    return { dir, paths: selected };
+    return { dir, paths: [...selected] };
   }
 
   const state = ws.getState();
@@ -43,7 +44,34 @@ function getActiveGeminiReferences() {
   return { dir, paths: [] };
 }
 
-function syncGeminiReferenceUI() {
+function getActiveGeminiReferences() {
+  if (pinnedSplitRef && pinnedSplitRef.dir && pinnedSplitRef.paths && pinnedSplitRef.paths.length > 0) {
+    return pinnedSplitRef;
+  }
+
+  const activeWs = (typeof window.getActiveWorkspace === "function")
+    ? window.getActiveWorkspace()
+    : window.primaryWorkspace;
+
+  const activeRefs = extractWorkspaceReferences(activeWs);
+  if (activeRefs.paths.length > 0) {
+    return activeRefs;
+  }
+
+  if (activeWs !== window.primaryWorkspace && window.primaryWorkspace) {
+    const primaryRefs = extractWorkspaceReferences(window.primaryWorkspace);
+    if (primaryRefs.paths.length > 0) {
+      return primaryRefs;
+    }
+  }
+
+  return { dir: activeRefs.dir || (window.primaryWorkspace ? window.primaryWorkspace.getDirectory() : ""), paths: [] };
+}
+
+function syncGeminiReferenceUI(preservePinned = false) {
+  if (!preservePinned) {
+    pinnedSplitRef = null;
+  }
   if (!isGeminiStudioOpen) return;
   const strip = document.getElementById("geminiRefStrip");
   if (!strip) return;
@@ -133,8 +161,20 @@ function openGeminiModal() {
   const splitControls = document.getElementById("splitDockControls");
   const dockBtn = document.getElementById("geminiDockToggleBtn");
 
-  if (typeof isSplitMode !== "undefined" && isSplitMode) {
-    toggleSplitView();
+  pinnedSplitRef = null;
+  const preOpenWs = (typeof window.getActiveWorkspace === "function")
+    ? window.getActiveWorkspace()
+    : window.primaryWorkspace;
+  const preOpenRefs = extractWorkspaceReferences(preOpenWs);
+  if (preOpenRefs.paths.length > 0) {
+    pinnedSplitRef = preOpenRefs;
+  }
+
+  // Dock into Pane 2's slot without destroying Split Mode state
+  wasSplitBeforeGemini = (typeof isSplitMode !== "undefined" && isSplitMode);
+  if (wasSplitBeforeGemini) {
+    if (secondaryMount) secondaryMount.classList.add("hidden");
+    if (splitControls) splitControls.classList.add("hidden");
   }
 
   isGeminiStudioOpen = true;
@@ -143,12 +183,12 @@ function openGeminiModal() {
   geminiMount.classList.remove("hidden");
 
   if (dockBtn) {
-    dockBtn.className = "px-4 py-2.5 bg-rose-600 hover:bg-rose-500 border border-rose-400 text-white rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 shadow-lg shadow-rose-600/40";
+    dockBtn.className = "px-3.5 py-2 bg-rose-600 hover:bg-rose-500 border border-rose-400 text-white rounded-lg text-sm font-black flex items-center gap-1.5 transition shrink-0 shadow-lg shadow-rose-600/40 whitespace-nowrap";
   }
 
   updateKeyStatusUI();
   updateHistoryBadge();
-  syncGeminiReferenceUI();
+  syncGeminiReferenceUI(true);
   switchStageView('active');
   if (geminiSessionHistory.length === 0) {
     renderInitialStreamState();
@@ -164,17 +204,32 @@ function closeGeminiModal() {
   const vidEl = document.getElementById("geminiSourceVideo");
   if (vidEl) { vidEl.pause(); vidEl.src = ""; }
   const stage = document.getElementById("mainWorkspaceStage");
+  const secondaryMount = document.getElementById("secondaryWorkspaceMount");
   const geminiMount = document.getElementById("geminiStudioMount");
+  const splitControls = document.getElementById("splitDockControls");
   const dockBtn = document.getElementById("geminiDockToggleBtn");
 
+  pinnedSplitRef = null;
   isGeminiStudioOpen = false;
   if (geminiMount) geminiMount.classList.add("hidden");
-  if (stage) {
-    stage.classList.remove("grid-cols-2");
-    stage.classList.add("grid-cols-1");
+
+  if (wasSplitBeforeGemini && typeof isSplitMode !== "undefined" && isSplitMode) {
+    if (secondaryMount) secondaryMount.classList.remove("hidden");
+    if (splitControls) splitControls.classList.remove("hidden");
+    if (stage) {
+      stage.classList.remove("grid-cols-1");
+      stage.classList.add("grid-cols-2");
+    }
+  } else {
+    if (stage) {
+      stage.classList.remove("grid-cols-2");
+      stage.classList.add("grid-cols-1");
+    }
   }
+  wasSplitBeforeGemini = false;
+
   if (dockBtn) {
-    dockBtn.className = "px-4 py-2.5 bg-gradient-to-r from-indigo-950 to-sky-950 hover:from-indigo-900 hover:to-sky-900 border border-sky-500/60 text-sky-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 shadow";
+    dockBtn.className = "px-3.5 py-2 bg-gradient-to-r from-indigo-950 to-sky-950 hover:from-indigo-900 hover:to-sky-900 border border-sky-500/60 text-sky-200 rounded-lg text-sm font-black flex items-center gap-1.5 transition shrink-0 shadow whitespace-nowrap";
   }
 }
 
@@ -343,6 +398,10 @@ async function applyTagsById(id) {
       targetDir = item.sourceDir;
       targetRels = item.sourcePaths;
     }
+  } else {
+    const refs = getActiveGeminiReferences();
+    targetDir = refs.dir;
+    targetRels = refs.paths;
   }
 
   if (!textToParse) return;
@@ -358,17 +417,22 @@ async function applyTagsById(id) {
     return;
   }
 
-  const ws = window.primaryWorkspace;
-  if (ws && targetDir && ws.getDirectory() === targetDir && targetRels.length > 0) {
+  if (targetDir && targetRels.length > 0) {
     await fetch("/api/tags/add", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dir: targetDir, relative_paths: targetRels, tags })
     });
-    await ws.setDirectory(targetDir, ws.getState());
+    const workspaces = [window.primaryWorkspace, window.secondaryWorkspace].filter(Boolean);
+    for (const w of workspaces) {
+      if (w.getDirectory() === targetDir) {
+        await w.setDirectory(targetDir, w.getState());
+      }
+    }
     if (typeof showToast === "function") showToast(`Applied ${tags.length} AI tags to ${targetRels[0]}`);
-  } else if (ws) {
-    await ws.applyTags(tags);
+  } else {
+    const ws = (typeof window.getActiveWorkspace === "function") ? window.getActiveWorkspace() : window.primaryWorkspace;
+    if (ws) await ws.applyTags(tags);
   }
 }
 
@@ -377,7 +441,7 @@ async function handleGeminiSubmit(e) {
 
   const { dir, paths } = getActiveGeminiReferences();
   if (!dir || paths.length === 0) {
-    if (typeof showToast === "function") showToast("Select or inspect a photo on the left first");
+    if (typeof showToast === "function") showToast("Select or inspect a photo first");
     return;
   }
 
@@ -469,9 +533,9 @@ async function runGeminiRequest(dir, paths, prompt) {
           sourcePaths: paths,
           prompt: prompt,
           model: model,
-          data: b64, // Saved for backend writing
+          data: b64,
           mime_type: mime,
-          blobUrl: blobUrl, // Lightweight DOM reference
+          blobUrl: blobUrl,
           saved: false,
           savedName: "",
           text: data.text || ""
@@ -546,9 +610,11 @@ async function commitGeminiArtifact(recordId, btnEl = null) {
     if (typeof clearLastAction === "function") {
       clearLastAction();
     }
-    const ws = window.primaryWorkspace;
-    if (ws && ws.getDirectory() === item.sourceDir) {
-      await ws.setDirectory(item.sourceDir, ws.getState());
+    const workspaces = [window.primaryWorkspace, window.secondaryWorkspace].filter(Boolean);
+    for (const w of workspaces) {
+      if (w.getDirectory() === item.sourceDir) {
+        await w.setDirectory(item.sourceDir, w.getState());
+      }
     }
   } catch (err) {
     if (typeof showToast === "function") showToast("Failed to save: " + err.message, 4000);

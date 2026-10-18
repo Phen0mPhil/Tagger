@@ -80,7 +80,7 @@ return nil
 }
 
 if d.IsDir() {
-if path == c.RootDir {
+if canonicalizePath(path) == c.RootDir {
 return nil
 }
 if shouldSkipDir(d.Name()) {
@@ -89,7 +89,7 @@ return filepath.SkipDir
 if !recursive {
 return filepath.SkipDir
 }
-dirSidecarCache[path] = loadDiskTagsForDir(path)
+dirSidecarCache[canonicalizePath(path)] = loadDiskTagsForDir(path)
 return nil
 }
 
@@ -121,7 +121,7 @@ Tags:         []string{},
 if existing, ok := dirSidecarCache[c.RootDir][cleanRel]; ok && len(existing) > 0 {
 entry.Tags = existing
 } else {
-parentDir := filepath.Dir(path)
+parentDir := canonicalizePath(filepath.Dir(path))
 if subTags, exists := dirSidecarCache[parentDir]; exists {
 subRel := filepath.ToSlash(filepath.Clean(d.Name()))
 if foundTags, ok := subTags[subRel]; ok {

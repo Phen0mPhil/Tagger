@@ -4,6 +4,7 @@ import (
 "embed"
 "fmt"
 "io/fs"
+"net"
 "net/http"
 "os"
 "os/exec"
@@ -38,24 +39,50 @@ mux.HandleFunc("/api/files/move", handleMoveFiles)
 mux.HandleFunc("/api/image", handleServeImage)
 mux.HandleFunc("/api/thumbnail", handleServeThumbnail)
 mux.HandleFunc("/api/gemini/run", handleGeminiRun)
-	mux.HandleFunc("/api/gemini/save", handleSaveGeminiArtifact)
+mux.HandleFunc("/api/gemini/save", handleSaveGeminiArtifact)
 mux.HandleFunc("/api/heartbeat", handleHeartbeat)
+mux.HandleFunc("/api/client-close", handleClientClose)
 mux.HandleFunc("/api/shutdown", handleShutdown)
 
 port := 8080
+addr := fmt.Sprintf(":%d", port)
 url := fmt.Sprintf("http://localhost:%d", port)
 
+// If an old instance is still holding port 8080, tell it to shut down and reclaim the port
+ln, err := net.Listen("tcp", addr)
+if err != nil {
+client := &http.Client{Timeout: 500 * time.Millisecond}
+_, _ = client.Post(url+"/api/shutdown", "application/json", nil)
+for i := 0; i < 10; i++ {
+time.Sleep(100 * time.Millisecond)
+ln, err = net.Listen("tcp", addr)
+if err == nil {
+break
+}
+}
+if err != nil {
+// Another instance is still active; pop open the browser window to it and exit
+openBrowser(url)
+time.Sleep(500 * time.Millisecond)
+return
+}
+}
+
 go func() {
-time.Sleep(350 * time.Millisecond)
+time.Sleep(250 * time.Millisecond)
 openBrowser(url)
 }()
 
+handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+touchServerActivity()
+mux.ServeHTTP(w, r)
+})
+
 server := &http.Server{
-Addr:    fmt.Sprintf(":%d", port),
-Handler: mux,
+Handler: handler,
 }
 
-_ = server.ListenAndServe()
+_ = server.Serve(ln)
 }
 
 func openBrowser(url string) {

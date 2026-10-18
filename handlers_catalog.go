@@ -9,6 +9,7 @@ import (
 "sort"
 "strings"
 "sync"
+"sync/atomic"
 "time"
 )
 
@@ -84,7 +85,11 @@ http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 return
 }
 
+pickerActive.Store(true)
 selected, err := pickFolderGUI()
+pickerActive.Store(false)
+touchServerActivity()
+
 if err != nil {
 http.Error(w, fmt.Sprintf("Picker error: %v", err), http.StatusInternalServerError)
 return
@@ -125,13 +130,15 @@ http.Error(w, fmt.Sprintf("Scan error: %v", scanErr), http.StatusInternalServerE
 return
 }
 
-go prewarmThumbnails(cat)
+cat.mu.RLock()
+totalCount := len(cat.Entries)
+cat.mu.RUnlock()
 
 w.Header().Set("Content-Type", "application/json")
 _ = json.NewEncoder(w).Encode(map[string]any{
 "status":     "ok",
 "discovered": discovered,
-"total":      len(cat.Entries),
+"total":      totalCount,
 "root_dir":   canonical,
 })
 }
@@ -249,15 +256,22 @@ http.Error(w, "Invalid directory: "+canonical, http.StatusBadRequest)
 return
 }
 
-movedCount, resolvedDestDir, movedPaths, err := cat.MoveEntries(req.DestSubfolder, req.RelativePaths)
-if err == nil && resolvedDestDir != "" {
-	globalPool.mu.Lock()
-	delete(globalPool.catalogs, resolvedDestDir)
-	globalPool.mu.Unlock()
-}
+movedCount, resolvedDestDir, movedPaths, createdNewDir, movedEntries, err := cat.MoveEntries(req.DestSubfolder, req.RelativePaths)
 if err != nil {
 http.Error(w, fmt.Sprintf("Move error: %v", err), http.StatusInternalServerError)
 return
+}
+
+if movedCount > 0 && resolvedDestDir != "" && resolvedDestDir != canonical {
+destCat := globalPool.Get(resolvedDestDir)
+if destCat != nil {
+destCat.mu.Lock()
+for name, entry := range movedEntries {
+destCat.Entries[name] = entry
+}
+_ = destCat.saveToDiskLocked()
+destCat.mu.Unlock()
+}
 }
 
 w.Header().Set("Content-Type", "application/json")
@@ -266,44 +280,79 @@ _ = json.NewEncoder(w).Encode(map[string]any{
 "moved":       movedCount,
 "dest_dir":    resolvedDestDir,
 "moved_paths": movedPaths,
+"created_dir": createdNewDir,
 })
 }
 
 var (
-lastHeartbeat     = time.Now()
-heartbeatMutex    sync.Mutex
-heartbeatInitOnce sync.Once
+clientMu     sync.Mutex
+activeClients = make(map[string]time.Time)
+lastActivity = time.Now()
+pickerActive atomic.Bool
 )
 
-func startHeartbeatMonitor() {
-go func() {
-for {
-time.Sleep(5 * time.Second)
-heartbeatMutex.Lock()
-elapsed := time.Since(lastHeartbeat)
-heartbeatMutex.Unlock()
-
-if elapsed > 60*time.Second {
-os.Exit(0)
-}
-}
-}()
+func touchServerActivity() {
+clientMu.Lock()
+lastActivity = time.Now()
+clientMu.Unlock()
 }
 
 func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
-heartbeatInitOnce.Do(startHeartbeatMonitor)
-heartbeatMutex.Lock()
-lastHeartbeat = time.Now()
-heartbeatMutex.Unlock()
+clientID := r.URL.Query().Get("id")
+if clientID == "" {
+clientID = "default"
+}
+clientMu.Lock()
+activeClients[clientID] = time.Now()
+lastActivity = time.Now()
+clientMu.Unlock()
+
 w.WriteHeader(http.StatusOK)
 _, _ = w.Write([]byte("ok"))
+}
+
+func handleClientClose(w http.ResponseWriter, r *http.Request) {
+clientID := r.URL.Query().Get("id")
+clientMu.Lock()
+if clientID != "" {
+delete(activeClients, clientID)
+} else {
+activeClients = make(map[string]time.Time)
+}
+closeTime := time.Now()
+clientMu.Unlock()
+
+// Wait 1.5s to allow page refreshes (F5) or secondary tabs to re-register before exiting
+go func() {
+time.Sleep(1500 * time.Millisecond)
+if pickerActive.Load() {
+return
+}
+clientMu.Lock()
+now := time.Now()
+for id, seen := range activeClients {
+if now.Sub(seen) > 15*time.Second {
+delete(activeClients, id)
+}
+}
+remaining := len(activeClients)
+recentActivity := lastActivity.After(closeTime)
+clientMu.Unlock()
+
+if remaining == 0 && !recentActivity {
+os.Exit(0)
+}
+}()
+
+w.WriteHeader(http.StatusOK)
+_, _ = w.Write([]byte("closing"))
 }
 
 func handleShutdown(w http.ResponseWriter, r *http.Request) {
 w.WriteHeader(http.StatusOK)
 _, _ = w.Write([]byte("Shutting down..."))
 go func() {
-time.Sleep(100 * time.Millisecond)
+time.Sleep(50 * time.Millisecond)
 os.Exit(0)
 }()
 }

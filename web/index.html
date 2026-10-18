@@ -12,32 +12,32 @@
 </head>
 <body class="h-screen w-screen flex flex-col font-sans select-none bg-black text-slate-100 text-sm overflow-hidden">
 
-  <!-- UNIFIED MASTER HEADER -->
-  <header class="sticky top-0 z-40 bg-black/95 shadow-2xl backdrop-blur border-b border-zinc-800 px-4 py-2.5 flex items-center justify-between gap-3 shrink-0">
-    <div class="flex items-center gap-2 flex-wrap flex-grow min-w-0">
-      <button onclick="pickFolder()" class="px-4 py-2.5 bg-teal-950 hover:bg-teal-900 text-teal-200 rounded-lg border border-teal-700 text-sm font-black transition shadow shrink-0" title="Open directory picker">📁</button>
-      <label class="flex items-center gap-1.5 text-xs text-zinc-300 font-bold cursor-pointer shrink-0 px-1">
+  <!-- UNIFIED MASTER HEADER (FIXED SINGLE-LINE HEIGHT, NO VERTICAL SHIFT) -->
+  <header class="sticky top-0 z-40 h-14 bg-black/95 shadow-2xl backdrop-blur border-b border-zinc-800 px-3 flex items-center justify-between gap-2 flex-nowrap shrink-0">
+    <div class="flex items-center gap-1.5 flex-nowrap flex-grow min-w-0">
+      <button onclick="pickFolder()" class="px-3.5 py-2 bg-teal-950 hover:bg-teal-900 text-teal-200 rounded-lg border border-teal-700 text-sm font-black transition shadow shrink-0" title="Open directory picker">📁</button>
+      <label class="flex items-center gap-1.5 text-xs text-zinc-300 font-bold cursor-pointer shrink-0 px-1 whitespace-nowrap">
         <input id="recursiveCheck" type="checkbox" onchange="rescanWorkspaces()" class="accent-rose-500 rounded h-4 w-4">
         <span>All Folders</span>
       </label>
-      <div class="h-6 w-px bg-zinc-800"></div>
-      <button id="modeToggleBtn" onclick="toggleInteractionMode()" class="px-5 py-2.5 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 rounded-lg text-sm font-black transition flex items-center gap-2 shrink-0">
+      <div class="h-6 w-px bg-zinc-800 shrink-0"></div>
+      <button id="modeToggleBtn" onclick="toggleInteractionMode()" class="px-4 py-2 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 rounded-lg text-sm font-black transition flex items-center gap-2 shrink-0 whitespace-nowrap">
         <span id="modeIcon">☑</span> <span id="modeLabel">Multi-Select: Off</span>
       </button>
-      <button onclick="selectVisible()" class="px-4 py-2.5 bg-blue-950 hover:bg-blue-900 border border-blue-700 text-blue-200 font-black rounded-lg text-sm transition shrink-0">Select All</button>
-      <button onclick="clearSelection()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold rounded-lg text-sm transition shrink-0">Clear</button>
-      <div class="h-6 w-px bg-zinc-800"></div>
-      <button onclick="openMoveModal()" class="px-4 py-2.5 bg-orange-950 hover:bg-orange-900 border border-orange-700 text-orange-200 font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0">📦 Move</button>
-      <button onclick="quickMoveToJunk()" class="px-4 py-2.5 bg-amber-950 hover:bg-amber-900 border border-amber-700 text-amber-200 font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0">🗑 Move to Junk</button>
-      <button onclick="openJunkBin()" class="px-4 py-2.5 bg-fuchsia-950 hover:bg-fuchsia-900 border border-fuchsia-700 text-fuchsia-200 hover:text-white font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0" title="View files inside .junk">🗑 Junk Bin</button>
-      <div class="h-6 w-px bg-zinc-800"></div>
-      <button id="hubBtnSlideshow" onclick="toggleMenuDrawer('slideshow')" class="px-4 py-2.5 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0">
+      <button onclick="selectVisible()" class="px-3.5 py-2 bg-blue-950 hover:bg-blue-900 border border-blue-700 text-blue-200 font-black rounded-lg text-sm transition shrink-0 whitespace-nowrap">Select All</button>
+      <button onclick="clearSelection()" class="px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold rounded-lg text-sm transition shrink-0 whitespace-nowrap">Clear</button>
+      <div class="h-6 w-px bg-zinc-800 shrink-0"></div>
+      <button onclick="openMoveModal()" class="px-3.5 py-2 bg-orange-950 hover:bg-orange-900 border border-orange-700 text-orange-200 font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0 whitespace-nowrap">📦 Move</button>
+      <button onclick="quickMoveToJunk()" class="px-3.5 py-2 bg-amber-950 hover:bg-amber-900 border border-amber-700 text-amber-200 font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0 whitespace-nowrap">🗑 Move to Junk</button>
+      <button onclick="openJunkBin()" class="px-3.5 py-2 bg-fuchsia-950 hover:bg-fuchsia-900 border border-fuchsia-700 text-fuchsia-200 hover:text-white font-black rounded-lg text-sm transition flex items-center gap-1.5 shrink-0 whitespace-nowrap" title="View files inside .junk">🗑 Junk Bin</button>
+      <div class="h-6 w-px bg-zinc-800 shrink-0"></div>
+      <button id="hubBtnSlideshow" onclick="toggleMenuDrawer('slideshow')" class="px-3.5 py-2 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 whitespace-nowrap">
         <span class="text-emerald-400">▶</span>
         <span>Slideshow</span>
         <span id="deckCountBadge" class="bg-black/50 border border-emerald-700 text-emerald-300 px-1.5 py-0.5 rounded font-mono text-xs font-bold">0</span>
       </button>
       <div class="relative dropdown z-50 shrink-0">
-        <button id="viewingCountBtn" class="px-4 py-2.5 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700 text-cyan-200 rounded-lg text-sm font-black flex items-center gap-1.5 transition">
+        <button id="viewingCountBtn" class="px-3.5 py-2 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700 text-cyan-200 rounded-lg text-sm font-black flex items-center gap-1.5 transition whitespace-nowrap">
           <span>🔍</span>
           <span id="viewingLabel">Viewing (100)</span>
           <span class="text-[10px] text-cyan-400">▼</span>
@@ -72,40 +72,39 @@
           </div>
         </div>
       </div>
-      <button id="hubBtnTags" onclick="toggleMenuDrawer('tags')" class="px-4 py-2.5 bg-yellow-950 hover:bg-yellow-900 border border-yellow-700 text-yellow-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0">
+      <button id="hubBtnTags" onclick="toggleMenuDrawer('tags')" class="px-3.5 py-2 bg-yellow-950 hover:bg-yellow-900 border border-yellow-700 text-yellow-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 whitespace-nowrap">
         <span class="text-yellow-400">🏷</span>
         <span>Tags</span>
       </button>
-      <button id="geminiDockToggleBtn" onclick="toggleGeminiStudio()" class="px-4 py-2.5 bg-gradient-to-r from-indigo-950 to-sky-950 hover:from-indigo-900 hover:to-sky-900 border border-sky-500/60 text-sky-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 shadow">
+      <button id="geminiDockToggleBtn" onclick="toggleGeminiStudio()" class="px-3.5 py-2 bg-gradient-to-r from-indigo-950 to-sky-950 hover:from-indigo-900 hover:to-sky-900 border border-sky-500/60 text-sky-200 rounded-lg text-sm font-black flex items-center gap-1.5 transition shrink-0 shadow whitespace-nowrap">
+        <span>Google Gemini</span>
         <span>✨</span>
-        <span>AI Studio</span>
       </button>
-      <div id="splitDockControls" class="hidden flex items-center gap-2.5 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 shadow shrink-0">
+      <div id="splitDockControls" class="hidden flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 shadow shrink-0 whitespace-nowrap">
         <label class="flex items-center gap-1.5 text-xs text-zinc-300 font-bold cursor-pointer select-none">
           <input id="syncZoomCheck" type="checkbox" class="accent-rose-500 rounded h-3.5 w-3.5">
-          <span>🔗 Sync Tabs</span>
+          <span>🔗 Sync</span>
         </label>
         <div class="h-4 w-px bg-zinc-800"></div>
-        <button onclick="swapSplitWorkspaces()" class="text-xs px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-bold transition">⇄ Swap Sides</button>
+        <button onclick="swapSplitWorkspaces()" class="text-xs px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-bold transition">⇄ Swap</button>
       </div>
     </div>
-    <div class="flex items-center gap-2 shrink-0">
-      <button id="inlineCompareToggleBtn" onclick="toggleSplitView()" class="px-3.5 py-2.5 bg-violet-950 hover:bg-violet-900 border border-violet-700 text-violet-200 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow shrink-0">⚖ Split View</button>
-      <div class="relative flex items-center w-36">
-        <input id="searchInput" type="text" placeholder="Global search..." class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 pr-7 text-xs text-zinc-100 w-full focus:border-sky-500 focus:outline-none font-semibold" oninput="applyFilters()" />
+    <div class="flex items-center gap-1.5 flex-nowrap shrink-0">
+      <button id="inlineCompareToggleBtn" onclick="toggleSplitView()" class="px-3 py-2 bg-violet-950 hover:bg-violet-900 border border-violet-700 text-violet-200 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow shrink-0 whitespace-nowrap">⚖ Split View</button>
+      <div class="relative flex items-center w-32 shrink-0">
+        <input id="searchInput" type="text" placeholder="Global search..." class="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 pr-6 text-xs text-zinc-100 w-full focus:border-sky-500 focus:outline-none font-semibold" oninput="applyFilters()" />
         <button onclick="clearSearch()" class="absolute right-2 text-zinc-500 hover:text-zinc-200 text-xs font-bold">✕</button>
       </div>
-      <div class="relative flex items-center w-36">
-        <input id="sortTagInput" type="text" placeholder="Sort by Tag..." class="bg-zinc-950 border border-sky-900/80 rounded-lg px-3 py-2 pr-7 text-xs text-sky-200 placeholder-zinc-500 w-full focus:border-sky-400 focus:outline-none font-semibold" oninput="applySortTag(this.value)" />
+      <div class="relative flex items-center w-32 shrink-0">
+        <input id="sortTagInput" type="text" placeholder="Sort by Tag..." class="bg-zinc-950 border border-sky-900/80 rounded-lg px-2.5 py-1.5 pr-6 text-xs text-sky-200 placeholder-zinc-500 w-full focus:border-sky-400 focus:outline-none font-semibold" oninput="applySortTag(this.value)" />
         <button onclick="const el=document.getElementById('sortTagInput'); el.value=''; applySortTag('');" class="absolute right-2 text-zinc-500 hover:text-sky-300 text-xs font-bold">✕</button>
       </div>
-      <div class="relative flex items-center w-36">
-        <input id="excludeInput" type="text" placeholder="Exclude (-)..." class="bg-zinc-950 border border-rose-950/80 rounded-lg px-3 py-2 pr-7 text-xs text-rose-300 placeholder-zinc-600 w-full focus:border-rose-500 focus:outline-none font-semibold" oninput="applyFilters()" />
+      <div class="relative flex items-center w-32 shrink-0">
+        <input id="excludeInput" type="text" placeholder="Exclude (-)..." class="bg-zinc-950 border border-rose-950/80 rounded-lg px-2.5 py-1.5 pr-6 text-xs text-rose-300 placeholder-zinc-600 w-full focus:border-rose-500 focus:outline-none font-semibold" oninput="applyFilters()" />
         <button onclick="clearExclude()" class="absolute right-2 text-zinc-500 hover:text-rose-300 text-xs font-bold">✕</button>
       </div>
-      <button id="untaggedToggleBtn" onclick="toggleUntaggedOnly()" class="px-3.5 py-2 bg-lime-950 hover:bg-lime-900 text-lime-200 border border-lime-700 rounded-lg text-xs font-black transition shrink-0">★ Untagged</button>
-      <button onclick="launchNewSession()" class="px-3.5 py-2 bg-sky-950 hover:bg-sky-900 text-sky-200 border border-sky-700 rounded-lg text-xs font-black transition shrink-0">+ New Tab</button>
-      <button onclick="exitApp()" class="px-3.5 py-2 bg-red-950 hover:bg-red-900 text-red-200 border border-red-700 rounded-lg text-xs font-black transition shrink-0">✕</button>
+      <button id="untaggedToggleBtn" onclick="toggleUntaggedOnly()" class="px-3 py-2 bg-lime-950 hover:bg-lime-900 text-lime-200 border border-lime-700 rounded-lg text-xs font-black transition shrink-0 whitespace-nowrap">★ Untagged</button>
+      <button onclick="launchNewSession()" class="px-3 py-2 bg-sky-950 hover:bg-sky-900 text-sky-200 border border-sky-700 rounded-lg text-xs font-black transition shrink-0 whitespace-nowrap">+ New Tab</button>
     </div>
   </header>
 
@@ -148,7 +147,7 @@
       <div class="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between gap-2 shrink-0">
         <div class="flex items-center gap-2.5 flex-wrap">
           <span class="text-lg">✨</span>
-          <h2 class="font-black text-sm tracking-wide text-zinc-100 uppercase">Gemini Studio</h2>
+          <h2 class="font-black text-sm tracking-wide text-zinc-100 uppercase">Google Gemini</h2>
           <select id="geminiModelSelect" class="bg-zinc-900 border border-zinc-700 text-sky-300 text-xs font-bold rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer shadow-sm">
             <option value="gemini-3.1-flash-image" selected>Gemini 3.1 Flash Image (Gen & Edits)</option>
             <option value="gemini-3-pro-image">Gemini 3 Pro Image (High Quality)</option>
@@ -164,7 +163,7 @@
         </div>
       </div>
 
-      <!-- Active Reference Strip (Supports 1 or Multiple Selected Photos from Left Pane) -->
+      <!-- Active Reference Strip (Supports 1 or Multiple Selected Photos from Active Workspace) -->
       <div class="px-4 py-2 bg-zinc-900/70 border-b border-zinc-800 flex items-center justify-between gap-3 shrink-0">
         <div class="flex items-center gap-2 min-w-0 overflow-x-auto py-0.5">
           <span class="text-[11px] font-black uppercase tracking-wider text-sky-400 shrink-0">Reference(s):</span>
@@ -287,21 +286,43 @@
         <h3 class="font-bold text-base text-zinc-100 uppercase tracking-wider">Relocate Photos</h3>
         <button onclick="closeMoveModal()" class="text-zinc-400 hover:text-white text-lg font-bold">✕</button>
       </div>
-      <div>
-        <label class="text-xs text-zinc-400 font-bold block mb-2 uppercase tracking-wide">Pick Existing Subfolder:</label>
-        <div id="moveExistingFolders" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto mb-3"></div>
-        <button onclick="quickMoveToJunk()" class="w-full py-3 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-200 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2">🗑 Move to Junk Folder</button>
-      </div>
-      <div class="border-t border-zinc-800 pt-4">
-        <label class="text-xs text-zinc-400 font-bold block mb-1 uppercase tracking-wide">Or Type New Target Path:</label>
-        <div class="flex items-center gap-2 mt-1">
-          <input id="moveDestInput" type="text" placeholder="e.g. selects or D:/Archive/2026..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 font-mono focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter') executeSelectedMove()" />
-          <button onclick="browseExternalDestination()" class="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 rounded-lg text-xs font-bold shrink-0 transition">📂 Browse...</button>
+
+      <!-- 1. Destination Folder Input + Live Existence Check + Existing Folder Pills -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <label for="moveDestInput" class="text-xs text-zinc-300 font-bold uppercase tracking-wide">Target Folder (Pick Existing or Type New):</label>
+          <span id="moveFolderStatus" class="text-[11px] font-mono font-bold text-zinc-500"></span>
         </div>
+        <div class="flex items-center gap-2">
+          <input id="moveDestInput" type="text" placeholder="Type folder name (creates if new) or path..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-100 font-mono focus:border-amber-500 focus:outline-none" oninput="updateMoveFolderStatus()" onkeydown="if(event.key==='Enter') executeSelectedMove()" />
+          <button onclick="browseExternalDestination()" class="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 rounded-lg text-xs font-bold shrink-0 transition" title="Browse for a folder">📂 Browse...</button>
+        </div>
+        <div>
+          <span class="text-[11px] text-zinc-500 font-bold uppercase tracking-wider block mb-1.5">Click Existing Subfolder to Fill Input:</span>
+          <div id="moveExistingFolders" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-zinc-950/60 border border-zinc-800/80 rounded-lg"></div>
+        </div>
+        <button onclick="executeSelectedMove()" class="w-full px-5 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-lg text-sm transition shadow-lg">
+          📦 Move Selected to Target Folder
+        </button>
       </div>
-      <div class="flex gap-3 pt-3 border-t border-zinc-800">
-        <button onclick="executeSelectedMove()" class="flex-grow px-5 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-lg text-sm transition">Move Selected</button>
-        <button onclick="executeTagSweep()" class="px-5 py-3 bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold border border-amber-900 rounded-lg text-sm transition">Sweep by Tag</button>
+
+      <!-- 2. Dedicated Sweep by Tag Section -->
+      <div class="border-t border-zinc-800 pt-4 space-y-2">
+        <label for="sweepTagInput" class="text-xs text-zinc-300 font-bold block uppercase tracking-wide">Sweep All Photos with Tag:</label>
+        <div class="flex items-center gap-2">
+          <input id="sweepTagInput" type="text" placeholder="Specify tag to sweep (e.g. keeper)..." class="flex-grow bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-amber-200 font-mono focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter') executeTagSweep()" />
+          <button onclick="executeTagSweep()" class="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-black border border-amber-800 rounded-lg text-xs shrink-0 transition">
+            🧹 Sweep by Tag
+          </button>
+        </div>
+        <p class="text-[11px] text-zinc-500 font-mono">Moves matching photos into the Target Folder above (or a folder named after the tag if Target Folder is blank).</p>
+      </div>
+
+      <!-- 3. Separate Move to Junk Button -->
+      <div class="border-t border-zinc-800 pt-4">
+        <button onclick="quickMoveToJunk()" class="w-full py-2.5 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-200 rounded-lg text-xs font-black transition flex items-center justify-center gap-2">
+          🗑 Move Selected to Junk Folder (.junk)
+        </button>
       </div>
     </div>
   </div>

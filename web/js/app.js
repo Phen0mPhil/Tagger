@@ -2,18 +2,20 @@ let primaryWorkspace = null;
 let secondaryWorkspace = null;
 let isSplitMode = false;
 let activeWorkspaceId = "A";
+let knownMoveSubfolders = new Set();
+const SESSION_CLIENT_ID = "client_" + Math.random().toString(36).substring(2) + "_" + Date.now();
 
 const REST_BTN_CLASSES = {
-  modeToggleBtn: "px-5 py-2.5 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 rounded-lg text-sm font-black transition flex items-center gap-2 shrink-0",
-  inlineCompareToggleBtn: "px-3.5 py-2.5 bg-violet-950 hover:bg-violet-900 border border-violet-700 text-violet-200 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow shrink-0",
-  hubBtnSlideshow: "px-4 py-2.5 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0",
-  hubBtnTags: "px-4 py-2.5 bg-yellow-950 hover:bg-yellow-900 border border-yellow-700 text-yellow-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0",
-  untaggedToggleBtn: "px-3.5 py-2 bg-lime-950 hover:bg-lime-900 text-lime-200 border border-lime-700 rounded-lg text-xs font-black transition shrink-0"
+  modeToggleBtn: "px-4 py-2 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 rounded-lg text-sm font-black transition flex items-center gap-2 shrink-0 whitespace-nowrap",
+  inlineCompareToggleBtn: "px-3 py-2 bg-violet-950 hover:bg-violet-900 border border-violet-700 text-violet-200 rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow shrink-0 whitespace-nowrap",
+  hubBtnSlideshow: "px-3.5 py-2 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 whitespace-nowrap",
+  hubBtnTags: "px-3.5 py-2 bg-yellow-950 hover:bg-yellow-900 border border-yellow-700 text-yellow-200 rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 whitespace-nowrap",
+  untaggedToggleBtn: "px-3 py-2 bg-lime-950 hover:bg-lime-900 text-lime-200 border border-lime-700 rounded-lg text-xs font-black transition shrink-0 whitespace-nowrap"
 };
 
-const ACTIVE_RED_CLASS_LG = "px-5 py-2.5 bg-rose-600 hover:bg-rose-500 border border-rose-400 text-white rounded-lg text-sm font-black transition flex items-center gap-2 shrink-0 shadow-lg shadow-rose-600/40";
-const ACTIVE_RED_CLASS_MD = "px-4 py-2.5 bg-rose-600 hover:bg-rose-500 border border-rose-400 text-white rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 shadow-lg shadow-rose-600/40";
-const ACTIVE_RED_CLASS_SM = "px-3.5 py-2.5 bg-rose-600 hover:bg-rose-500 border border-rose-400 text-white rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-rose-600/40 shrink-0";
+const ACTIVE_RED_CLASS_LG = "px-4 py-2 bg-rose-600 hover:bg-rose-500 border border-rose-400 text-white rounded-lg text-sm font-black transition flex items-center gap-2 shrink-0 shadow-lg shadow-rose-600/40 whitespace-nowrap";
+const ACTIVE_RED_CLASS_MD = "px-3.5 py-2 bg-rose-600 hover:bg-rose-500 border border-rose-400 text-white rounded-lg text-sm font-black flex items-center gap-2 transition shrink-0 shadow-lg shadow-rose-600/40 whitespace-nowrap";
+const ACTIVE_RED_CLASS_SM = "px-3 py-2 bg-rose-600 hover:bg-rose-500 border border-rose-400 text-white rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow-lg shadow-rose-600/40 shrink-0 whitespace-nowrap";
 
 window.getActiveWorkspace = function() {
   if (activeWorkspaceId === "B" && isSplitMode && secondaryWorkspace) {
@@ -41,8 +43,24 @@ window.removeSpecificTag = (wsId, relPath, tag) => {
   }
 };
 
+function sendHeartbeat() {
+  fetch(`/api/heartbeat?id=${encodeURIComponent(SESSION_CLIENT_ID)}`, {
+    method: "POST",
+    keepalive: true
+  }).catch(() => {});
+}
+
+window.addEventListener("pagehide", () => {
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(`/api/client-close?id=${encodeURIComponent(SESSION_CLIENT_ID)}`);
+  } else {
+    fetch(`/api/client-close?id=${encodeURIComponent(SESSION_CLIENT_ID)}`, { method: "POST", keepalive: true }).catch(() => {});
+  }
+});
+
 async function initApp() {
-  setInterval(() => { fetch("/api/heartbeat", { method: "POST" }).catch(() => {}); }, 2500);
+  sendHeartbeat();
+  setInterval(sendHeartbeat, 3000);
 
   window.mainTagDock = createTagDock({
     containerEl: document.getElementById("palettePills"),
@@ -276,10 +294,10 @@ function changePageSize(val) {
 
 async function rescanWorkspaces() {
   if (primaryWorkspace && primaryWorkspace.getDirectory()) {
-    await primaryWorkspace.setDirectory(primaryWorkspace.getDirectory());
+    await primaryWorkspace.setDirectory(primaryWorkspace.getDirectory(), primaryWorkspace.getState());
   }
   if (isSplitMode && secondaryWorkspace && secondaryWorkspace.getDirectory()) {
-    await secondaryWorkspace.setDirectory(secondaryWorkspace.getDirectory());
+    await secondaryWorkspace.setDirectory(secondaryWorkspace.getDirectory(), secondaryWorkspace.getState());
   }
 }
 
@@ -335,32 +353,79 @@ async function openJunkBin() {
   if (typeof showToast === "function") showToast("Viewing Junk Bin. Select items and click 'Restore to Origin' to recover.");
 }
 
+function updateMoveFolderStatus() {
+  const input = document.getElementById("moveDestInput");
+  const statusEl = document.getElementById("moveFolderStatus");
+  if (!input || !statusEl) return;
+
+  const val = (input.value || "").trim();
+  if (!val) {
+    statusEl.textContent = "";
+    return;
+  }
+
+  if (val.includes(":") || val.startsWith("/")) {
+    statusEl.className = "text-[11px] font-mono font-bold text-sky-400";
+    statusEl.textContent = "📂 Custom Path (Creates if needed)";
+  } else if (knownMoveSubfolders.has(val.toLowerCase())) {
+    statusEl.className = "text-[11px] font-mono font-bold text-emerald-400";
+    statusEl.textContent = "✓ Folder exists";
+  } else {
+    statusEl.className = "text-[11px] font-mono font-bold text-amber-400";
+    statusEl.textContent = "✨ Will create new folder";
+  }
+}
+
 async function openMoveModal() {
   const modal = document.getElementById("moveModal");
   if (!modal) return;
   modal.classList.remove("hidden");
   const input = document.getElementById("moveDestInput");
+  const sweepInput = document.getElementById("sweepTagInput");
   if (input) { input.value = ""; input.focus(); }
+  if (sweepInput) { sweepInput.value = ""; }
+
+  knownMoveSubfolders.clear();
+  updateMoveFolderStatus();
 
   const container = document.getElementById("moveExistingFolders");
   if (container) {
-    container.innerHTML = "";
+    container.innerHTML = `<span class="text-xs text-zinc-600 font-mono italic">Loading folders...</span>`;
     const ws = window.getActiveWorkspace();
-    if (!ws) return;
+    if (!ws || !ws.getDirectory()) {
+      container.innerHTML = `<span class="text-xs text-zinc-600 font-mono italic">No active folder loaded</span>`;
+      return;
+    }
     const activeDir = ws.getDirectory();
     try {
       const res = await fetch(`/api/browse?dir=${encodeURIComponent(activeDir)}`);
       if (res.ok) {
         const data = await res.json();
-        (data.subfolders || []).forEach(sub => {
-          const btn = document.createElement("button");
-          btn.className = "px-3 py-1 bg-zinc-950 hover:bg-amber-950/80 border border-zinc-800 hover:border-amber-700 text-zinc-300 hover:text-amber-300 rounded-md text-xs font-mono transition";
-          btn.textContent = `📁 ${sub.name}`;
-          btn.onclick = () => { if (input) input.value = sub.name; };
-          container.appendChild(btn);
-        });
+        const subs = data.subfolders || [];
+        container.innerHTML = "";
+        if (subs.length === 0) {
+          container.innerHTML = `<span class="text-xs text-zinc-600 font-mono italic">No existing subfolders yet — type a name above to create one</span>`;
+        } else {
+          subs.forEach(sub => {
+            knownMoveSubfolders.add(sub.name.toLowerCase());
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "px-3 py-1 bg-zinc-900 hover:bg-amber-950/80 border border-zinc-700 hover:border-amber-600 text-zinc-200 hover:text-amber-300 rounded-md text-xs font-mono transition";
+            btn.textContent = `📁 ${sub.name}`;
+            btn.onclick = () => {
+              if (input) {
+                input.value = sub.name;
+                updateMoveFolderStatus();
+                input.focus();
+              }
+            };
+            container.appendChild(btn);
+          });
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      container.innerHTML = `<span class="text-xs text-rose-400 font-mono">Failed loading subfolders</span>`;
+    }
   }
 }
 
@@ -376,7 +441,10 @@ async function browseExternalDestination() {
       const data = await res.json();
       if (data.path && data.path.trim()) {
         const input = document.getElementById("moveDestInput");
-        if (input) input.value = data.path.trim();
+        if (input) {
+          input.value = data.path.trim();
+          updateMoveFolderStatus();
+        }
       }
     }
   } catch (err) {
@@ -385,15 +453,20 @@ async function browseExternalDestination() {
 }
 
 async function executeSelectedMove() {
-  const dest = (document.getElementById("moveDestInput").value || "").trim();
-  if (!dest) { if (typeof showToast === "function") showToast("Please enter or browse a destination path"); return; }
-  closeMoveModal();
-  closeAllDrawers();
+  const dest = (document.getElementById("moveDestInput")?.value || "").trim();
+  if (!dest) { if (typeof showToast === "function") showToast("Please enter or pick a destination folder"); return; }
 
   const ws = window.getActiveWorkspace();
   if (!ws) return;
-  const paths = ws.getSelected();
-  if (paths.length === 0) { if (typeof showToast === "function") showToast("No photos selected to move"); return; }
+  let paths = ws.getSelected();
+  if (paths.length === 0 && ws.getState && ws.getState().isInspectMode) {
+    const cur = ws.getCurrentItem();
+    if (cur) paths = [cur.relative_path];
+  }
+  if (paths.length === 0) { if (typeof showToast === "function") showToast("Select or inspect photos first to move"); return; }
+
+  closeMoveModal();
+  closeAllDrawers();
 
   try {
     const res = await fetch("/api/files/move", {
@@ -401,11 +474,14 @@ async function executeSelectedMove() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dir: ws.getDirectory(), dest_subfolder: dest, relative_paths: paths })
     });
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
     const data = await res.json();
-    if (typeof showToast === "function") showToast(`Moved ${data.moved} photos to ${dest}`);
+    const actionLabel = data.created_dir ? `Created '${dest}' & moved ${data.moved} item(s)` : `Moved ${data.moved} item(s) to ${dest}`;
+    if (typeof showToast === "function") showToast(actionLabel, 2800);
     
-    // Explicitly grab exactly what the backend saved
-    if (typeof setLastAction === "function") {
+    if (typeof setLastAction === "function" && data.moved > 0) {
       setLastAction({
         type: 'move',
         sourceDir: ws.getDirectory(),
@@ -415,16 +491,23 @@ async function executeSelectedMove() {
     }
 
     ws.clearSelection();
-    await ws.setDirectory(ws.getDirectory());
-  } catch (err) { if (typeof showToast === "function") showToast("Move failed: " + err.message); }
+    await rescanWorkspaces();
+  } catch (err) { if (typeof showToast === "function") showToast("Move failed: " + err.message, 4000); }
 }
 
 async function executeTagSweep() {
-  const tag = (document.getElementById("moveDestInput").value || "").trim();
-  if (!tag) { if (typeof showToast === "function") showToast("Enter a tag name to sweep into its folder"); return; }
+  const tagInput = document.getElementById("sweepTagInput");
+  const destInput = document.getElementById("moveDestInput");
+  const tag = (tagInput ? tagInput.value : "").trim();
+  if (!tag) {
+    if (typeof showToast === "function") showToast("Specify a tag name in 'Sweep All Photos with Tag'");
+    if (tagInput) tagInput.focus();
+    return;
+  }
+  const destFolder = (destInput && destInput.value.trim()) ? destInput.value.trim() : tag;
   closeMoveModal();
   closeAllDrawers();
-  if (typeof sweepTagToFolder === "function") await sweepTagToFolder(tag, tag);
+  if (typeof sweepTagToFolder === "function") await sweepTagToFolder(tag, destFolder);
 }
 
 async function quickMoveToJunk() {
@@ -451,11 +534,11 @@ async function quickMoveToJunk() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dir: ws.getDirectory(), dest_subfolder: ".junk", relative_paths: paths })
     });
+    if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     if (typeof showToast === "function") showToast(`Moved ${data.moved} items to .junk`);
     
-    // Explicitly grab exactly what the backend saved
-    if (typeof setLastAction === "function") {
+    if (typeof setLastAction === "function" && data.moved > 0) {
       setLastAction({
         type: 'move',
         sourceDir: ws.getDirectory(),
@@ -465,7 +548,7 @@ async function quickMoveToJunk() {
     }
 
     ws.clearSelection();
-    await ws.setDirectory(ws.getDirectory());
+    await rescanWorkspaces();
   } catch (err) { if (typeof showToast === "function") showToast("Junk failed: " + err.message); }
 }
 
@@ -527,7 +610,7 @@ window.executeUndo = async function() {
       if (res.ok) {
         showToast("Undo: Moved items back");
         if (typeof clearLastAction === "function") clearLastAction();
-        if (ws) await ws.setDirectory(lastAction.sourceDir, ws.getState());
+        await rescanWorkspaces();
       } else {
         const err = await res.text();
         showToast("Undo failed: " + err);
